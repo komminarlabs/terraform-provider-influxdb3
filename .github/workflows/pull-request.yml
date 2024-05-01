@@ -33,4 +33,4 @@ jobs:
           install-only: true
 
       - name: Run GoReleaser
-        run: goreleaser build --clean --skip=validate
+        run: goreleaser build --clean --skip=validate --snapshot
