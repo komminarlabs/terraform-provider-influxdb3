@@ -34,7 +34,7 @@ Credentials can be provided by using the `INFLUXDB3_ACCOUNT_ID` and `INFLUXDB3_C
 export INFLUXDB3_ACCOUNT_ID="*******"
 export INFLUXDB3_CLUSTER_ID="*******"
 export INFLUXDB3_TOKEN="*******"
-export INFLUXDB3_URL="https://console.influxdata.com"
+export INFLUXDB3_URL="https://console.influxdata.com/api/v0"
 
 provider "influxdb3" {}
 
@@ -49,4 +49,4 @@ terraform plan
 - `account_id` (String, Sensitive) The ID of the account that the cluster belongs to
 - `cluster_id` (String, Sensitive) The ID of the cluster that you want to manage
 - `token` (String, Sensitive) The InfluxDB management token
-- `url` (String) The InfluxDB Cloud Dedicated URL
+- `url` (String) The InfluxDB Cloud Dedicated Management API URL

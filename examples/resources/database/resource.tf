@@ -11,12 +11,6 @@ provider "influxdb3" {}
 resource "influxdb3_database" "signals" {
   name             = "signals"
   retention_period = 604800
-  partition_template = [
-    {
-      type  = "time"
-      value = "%M"
-    }
-  ]
 }
 
 output "signals_database" {

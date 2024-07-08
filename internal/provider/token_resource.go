@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"unsafe"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -13,7 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/komminarlabs/terraform-provider-influxdb3/internal/sdk/influxdb3"
+	"github.com/komminarlabs/influxdb3"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -30,7 +32,9 @@ func NewTokenResource() resource.Resource {
 
 // TokenResource defines the resource implementation.
 type TokenResource struct {
-	client influxdb3.Client
+	accountID influxdb3.UuidV4
+	client    influxdb3.ClientWithResponses
+	clusterID influxdb3.UuidV4
 }
 
 // Metadata returns the resource type name.
@@ -113,21 +117,21 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	// Generate API request body from plan
-	var permissions []influxdb3.Permission
-	for _, permissionData := range plan.Permissions {
-		permission := influxdb3.Permission{
-			Action:   permissionData.Action.ValueString(),
-			Resource: permissionData.Resource.ValueString(),
+	var permissionsRequest []influxdb3.DatabaseTokenPermission
+	for _, permission := range plan.Permissions {
+		permission := influxdb3.DatabaseTokenPermission{
+			Action:   permission.Action.ValueStringPointer(),
+			Resource: (*influxdb3.DatabaseTokenPermissionResource)((unsafe.Pointer(&permission.Resource))),
 		}
-		permissions = append(permissions, permission)
+		permissionsRequest = append(permissionsRequest, permission)
 	}
 
-	createToken := influxdb3.TokenParams{
+	createTokenRequest := influxdb3.CreateDatabaseTokenJSONRequestBody{
 		Description: plan.Description.ValueString(),
-		Permissions: permissions,
+		Permissions: &permissionsRequest,
 	}
 
-	apiResponse, err := r.client.TokenAPI().CreateToken(ctx, &createToken)
+	createTokenResponse, err := r.client.CreateDatabaseTokenWithResponse(ctx, r.accountID, r.clusterID, createTokenRequest)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error creating token",
@@ -136,14 +140,23 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
+	if createTokenResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error creating token",
+			fmt.Sprintf("Status: %s", createTokenResponse.Status()),
+		)
+		return
+	}
+	createToken := *createTokenResponse.JSON200
+
 	// Map response body to schema and populate Computed attribute values
-	plan.AccessToken = types.StringValue(apiResponse.AccessToken)
-	plan.AccountId = types.StringValue(apiResponse.AccountId)
-	plan.CreatedAt = types.StringValue(apiResponse.CreatedAt)
-	plan.ClusterId = types.StringValue(apiResponse.ClusterId)
-	plan.Description = types.StringValue(apiResponse.Description)
-	plan.Id = types.StringValue(apiResponse.Id)
-	plan.Permissions = getPermissions(apiResponse.Permissions)
+	plan.AccessToken = types.StringValue(createToken.AccessToken)
+	plan.AccountId = types.StringValue(createToken.AccountId.String())
+	plan.CreatedAt = types.StringValue(createToken.CreatedAt.String())
+	plan.ClusterId = types.StringValue(createToken.ClusterId.String())
+	plan.Description = types.StringValue(createToken.Description)
+	plan.Id = types.StringValue(createToken.Id.String())
+	plan.Permissions = getPermissions(createToken.Permissions)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -163,22 +176,41 @@ func (r *TokenResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	// Get refreshed token value from InfluxDB
-	readToken, err := r.client.TokenAPI().GetTokenByID(ctx, state.Id.ValueString())
+	// parse the token ID
+	tokenId, err := uuid.Parse(state.Id.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error getting Tokens",
+			"Validation error. Ensure the Id is in UUID format.",
 			err.Error(),
 		)
 		return
 	}
 
+	// Get refreshed token value from InfluxDB
+	readTokenResponse, err := r.client.GetDatabaseTokenWithResponse(ctx, r.accountID, r.clusterID, tokenId)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error getting token",
+			err.Error(),
+		)
+		return
+	}
+
+	if readTokenResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error getting token",
+			fmt.Sprintf("Status: %s", readTokenResponse.Status()),
+		)
+		return
+	}
+	readToken := *readTokenResponse.JSON200
+
 	// Overwrite items with refreshed state
-	state.AccountId = types.StringValue(readToken.AccountId)
-	state.CreatedAt = types.StringValue(readToken.CreatedAt)
-	state.ClusterId = types.StringValue(readToken.ClusterId)
+	state.AccountId = types.StringValue(readToken.AccountId.String())
+	state.CreatedAt = types.StringValue(readToken.CreatedAt.String())
+	state.ClusterId = types.StringValue(readToken.ClusterId.String())
 	state.Description = types.StringValue(readToken.Description)
-	state.Id = types.StringValue(readToken.Id)
+	state.Id = types.StringValue(readToken.Id.String())
 	state.Permissions = getPermissions(readToken.Permissions)
 
 	// Save updated data into Terraform state
@@ -198,23 +230,33 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
-	// Generate API request body from plan
-	var permissions []influxdb3.Permission
-	for _, permissionData := range plan.Permissions {
-		permission := influxdb3.Permission{
-			Action:   permissionData.Action.ValueString(),
-			Resource: permissionData.Resource.ValueString(),
-		}
-		permissions = append(permissions, permission)
+	// parse the token ID
+	tokenId, err := uuid.Parse(plan.Id.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Validation error. Ensure the Id is in UUID format.",
+			err.Error(),
+		)
+		return
 	}
 
-	updateToken := influxdb3.TokenParams{
-		Description: plan.Description.ValueString(),
-		Permissions: permissions,
+	// Generate API request body from plan
+	var permissionsRequest []influxdb3.DatabaseTokenPermission
+	for _, permission := range plan.Permissions {
+		permission := influxdb3.DatabaseTokenPermission{
+			Action:   permission.Action.ValueStringPointer(),
+			Resource: (*influxdb3.DatabaseTokenPermissionResource)((unsafe.Pointer(&permission.Resource))),
+		}
+		permissionsRequest = append(permissionsRequest, permission)
+	}
+
+	updateTokenRequest := influxdb3.UpdateDatabaseTokenJSONRequestBody{
+		Description: plan.Description.ValueStringPointer(),
+		Permissions: &permissionsRequest,
 	}
 
 	// Update existing token
-	apiResponse, err := r.client.TokenAPI().UpdateToken(ctx, plan.Id.ValueString(), &updateToken)
+	updateTokenResponse, err := r.client.UpdateDatabaseTokenWithResponse(ctx, r.accountID, r.clusterID, tokenId, updateTokenRequest)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error updating token",
@@ -223,13 +265,22 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
+	if updateTokenResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error updating token",
+			fmt.Sprintf("Status: %s", updateTokenResponse.Status()),
+		)
+		return
+	}
+	updateToken := *updateTokenResponse.JSON200
+
 	// Overwrite items with refreshed state
-	plan.AccountId = types.StringValue(apiResponse.AccountId)
-	plan.CreatedAt = types.StringValue(apiResponse.CreatedAt)
-	plan.ClusterId = types.StringValue(apiResponse.ClusterId)
-	plan.Description = types.StringValue(apiResponse.Description)
-	plan.Id = types.StringValue(apiResponse.Id)
-	plan.Permissions = getPermissions(apiResponse.Permissions)
+	plan.AccountId = types.StringValue(updateToken.AccountId.String())
+	plan.CreatedAt = types.StringValue(updateToken.CreatedAt.String())
+	plan.ClusterId = types.StringValue(updateToken.ClusterId.String())
+	plan.Description = types.StringValue(updateToken.Description)
+	plan.Id = types.StringValue(updateToken.Id.String())
+	plan.Permissions = getPermissions(updateToken.Permissions)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -248,12 +299,30 @@ func (r *TokenResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 		return
 	}
 
+	// parse the token ID
+	tokenId, err := uuid.Parse(state.Id.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Validation error. Ensure the Id is in UUID format.",
+			err.Error(),
+		)
+		return
+	}
+
 	// Delete existing token
-	err := r.client.TokenAPI().DeleteToken(ctx, state.Id.ValueString())
+	deleteTokenResponse, err := r.client.DeleteDatabaseTokenWithResponse(ctx, r.accountID, r.clusterID, tokenId)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error deleting token",
 			"Could not delete token, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	if deleteTokenResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error deleting token",
+			fmt.Sprintf("Status: %s", deleteTokenResponse.Status()),
 		)
 		return
 	}
@@ -266,31 +335,20 @@ func (r *TokenResource) Configure(ctx context.Context, req resource.ConfigureReq
 		return
 	}
 
-	client, ok := req.ProviderData.(influxdb3.Client)
+	pd, ok := req.ProviderData.(providerData)
 	if !ok {
 		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
-
 		return
 	}
 
-	r.client = client
+	r.accountID = pd.accountID
+	r.client = pd.client
+	r.clusterID = pd.clusterID
 }
 
 func (r *TokenResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func getPermissions(permissions []influxdb3.Permission) []TokenPermissionModel {
-	permissionsState := []TokenPermissionModel{}
-	for _, permission := range permissions {
-		permissionState := TokenPermissionModel{
-			Action:   types.StringValue(permission.Action),
-			Resource: types.StringValue(permission.Resource),
-		}
-		permissionsState = append(permissionsState, permissionState)
-	}
-	return permissionsState
 }

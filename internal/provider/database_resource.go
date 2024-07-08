@@ -4,19 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/komminarlabs/terraform-provider-influxdb3/internal/sdk/influxdb3"
+	"github.com/komminarlabs/influxdb3"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -33,7 +28,9 @@ func NewDatabaseResource() resource.Resource {
 
 // DatabaseResource defines the resource implementation.
 type DatabaseResource struct {
-	client influxdb3.Client
+	accountID influxdb3.UuidV4
+	client    influxdb3.ClientWithResponses
+	clusterID influxdb3.UuidV4
 }
 
 // Metadata returns the resource type name.
@@ -81,31 +78,6 @@ func (r *DatabaseResource) Schema(ctx context.Context, req resource.SchemaReques
 				Default:     int64default.StaticInt64(0),
 				Description: "The retention period of the cluster database in nanoseconds. The default is `0`. If the retention period is not set or is set to `0`, the database will have infinite retention.",
 			},
-			"partition_template": schema.ListNestedAttribute{
-				Computed:            true,
-				Optional:            true,
-				Default:             listdefault.StaticValue(types.ListValueMust(DatabasePartitionTemplateModel{}.GetAttrType(), []attr.Value{})),
-				MarkdownDescription: "A [template](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/custom-partitions/partition-templates/) for partitioning a cluster database. API does not support updating partition template, so updating this will force resource replacement.",
-				Validators: []validator.List{
-					listvalidator.UniqueValues(),
-				},
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.UseStateForUnknown(),
-					listplanmodifier.RequiresReplace(), // API does not support updating partition template
-				},
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"type": schema.StringAttribute{
-							Required:    true,
-							Description: "The type of the template part.",
-						},
-						"value": schema.StringAttribute{
-							Required:    true,
-							Description: "The value of the template part.",
-						},
-					},
-				},
-			},
 		},
 	}
 }
@@ -121,24 +93,16 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	// Generate API request body from plan
-	partitions := []influxdb3.PartitionTemplate{}
-	for _, partitionData := range plan.PartitionTemplate {
-		permission := influxdb3.PartitionTemplate{
-			Type:  partitionData.Type.ValueString(),
-			Value: partitionData.Value.ValueString(),
-		}
-		partitions = append(partitions, permission)
-	}
-
-	createDatabase := influxdb3.DatabaseParams{
+	maxTables := int32(plan.MaxTables.ValueInt64())
+	maxColumnsPerTable := int32(plan.MaxColumnsPerTable.ValueInt64())
+	createDatabaseRequest := influxdb3.CreateClusterDatabaseJSONRequestBody{
 		Name:               plan.Name.ValueString(),
-		MaxTables:          int(plan.MaxTables.ValueInt64()),
-		MaxColumnsPerTable: int(plan.MaxColumnsPerTable.ValueInt64()),
-		RetentionPeriod:    plan.RetentionPeriod.ValueInt64(),
-		PartitionTemplate:  partitions,
+		MaxTables:          &maxTables,
+		MaxColumnsPerTable: &maxColumnsPerTable,
+		RetentionPeriod:    plan.RetentionPeriod.ValueInt64Pointer(),
 	}
 
-	apiResponse, err := r.client.DatabaseAPI().CreateDatabase(ctx, &createDatabase)
+	createDatabasesResponse, err := r.client.CreateClusterDatabaseWithResponse(ctx, r.accountID, r.clusterID, createDatabaseRequest)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error creating database",
@@ -147,14 +111,22 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	if createDatabasesResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error creating database",
+			fmt.Sprintf("Status: %s", createDatabasesResponse.Status()),
+		)
+		return
+	}
+	createDatabases := createDatabasesResponse.JSON200
+
 	// Map response body to schema and populate Computed attribute values
-	plan.AccountId = types.StringValue(apiResponse.AccountId)
-	plan.ClusterId = types.StringValue(apiResponse.ClusterId)
-	plan.Name = types.StringValue(apiResponse.Name)
-	plan.MaxTables = types.Int64Value(apiResponse.MaxTables)
-	plan.MaxColumnsPerTable = types.Int64Value(apiResponse.MaxColumnsPerTable)
-	plan.RetentionPeriod = types.Int64Value(apiResponse.RetentionPeriod)
-	plan.PartitionTemplate = getPartitionTemplate(apiResponse.PartitionTemplate)
+	plan.AccountId = types.StringValue(createDatabases.AccountId.String())
+	plan.ClusterId = types.StringValue(createDatabases.ClusterId.String())
+	plan.Name = types.StringValue(createDatabases.Name)
+	plan.MaxTables = types.Int64Value(int64(createDatabases.MaxTables))
+	plan.MaxColumnsPerTable = types.Int64Value(int64(createDatabases.MaxColumnsPerTable))
+	plan.RetentionPeriod = types.Int64Value(createDatabases.RetentionPeriod)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -175,23 +147,35 @@ func (r *DatabaseResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	// Get refreshed database value from InfluxDB
-	readDatabase, err := r.client.DatabaseAPI().GetDatabaseByName(ctx, state.Name.ValueString())
+	readDatabasesResponse, err := r.client.GetClusterDatabasesWithResponse(ctx, r.accountID, r.clusterID)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Database not found",
+			"Error getting database",
 			err.Error(),
 		)
 		return
 	}
 
+	if readDatabasesResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error getting database",
+			fmt.Sprintf("Status: %s", readDatabasesResponse.Status()),
+		)
+		return
+	}
+
+	// Check if the database exists
+	readDatabase := getDatabaseByName(*readDatabasesResponse, state.Name.ValueString())
+	if readDatabase == nil {
+		resp.Diagnostics.AddError(
+			"Database not found",
+			fmt.Sprintf("Database with name %s not found", state.Name.ValueString()),
+		)
+		return
+	}
+
 	// Overwrite items with refreshed state
-	state.AccountId = types.StringValue(readDatabase.AccountId)
-	state.ClusterId = types.StringValue(readDatabase.ClusterId)
-	state.Name = types.StringValue(readDatabase.Name)
-	state.MaxTables = types.Int64Value(readDatabase.MaxTables)
-	state.MaxColumnsPerTable = types.Int64Value(readDatabase.MaxColumnsPerTable)
-	state.RetentionPeriod = types.Int64Value(readDatabase.RetentionPeriod)
-	state.PartitionTemplate = getPartitionTemplate(readDatabase.PartitionTemplate)
+	state = *readDatabase
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -211,15 +195,16 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	// Generate API request body from plan
-	updateDatabase := influxdb3.DatabaseParams{
-		Name:               plan.Name.ValueString(),
-		MaxTables:          int(plan.MaxTables.ValueInt64()),
-		MaxColumnsPerTable: int(plan.MaxColumnsPerTable.ValueInt64()),
-		RetentionPeriod:    plan.RetentionPeriod.ValueInt64(),
+	maxTables := int32(plan.MaxTables.ValueInt64())
+	maxColumnsPerTable := int32(plan.MaxColumnsPerTable.ValueInt64())
+	updateDatabaseRequest := influxdb3.UpdateClusterDatabaseJSONRequestBody{
+		MaxTables:          &maxTables,
+		MaxColumnsPerTable: &maxColumnsPerTable,
+		RetentionPeriod:    plan.RetentionPeriod.ValueInt64Pointer(),
 	}
 
 	// Update existing database
-	apiResponse, err := r.client.DatabaseAPI().UpdateDatabase(ctx, &updateDatabase)
+	updateDatabaseResponse, err := r.client.UpdateClusterDatabaseWithResponse(ctx, r.accountID, r.clusterID, plan.Name.ValueString(), updateDatabaseRequest)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error updating database",
@@ -228,13 +213,22 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 		return
 	}
 
+	if updateDatabaseResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error updating database",
+			fmt.Sprintf("Status: %s", updateDatabaseResponse.Status()),
+		)
+		return
+	}
+	updateDatabase := updateDatabaseResponse.JSON200
+
 	// Map response body to schema and populate Computed attribute values
-	plan.AccountId = types.StringValue(apiResponse.AccountId)
-	plan.ClusterId = types.StringValue(apiResponse.ClusterId)
-	plan.Name = types.StringValue(apiResponse.Name)
-	plan.MaxTables = types.Int64Value(apiResponse.MaxTables)
-	plan.MaxColumnsPerTable = types.Int64Value(apiResponse.MaxColumnsPerTable)
-	plan.RetentionPeriod = types.Int64Value(apiResponse.RetentionPeriod)
+	plan.AccountId = types.StringValue(updateDatabase.AccountId.String())
+	plan.ClusterId = types.StringValue(updateDatabase.ClusterId.String())
+	plan.Name = types.StringValue(updateDatabase.Name)
+	plan.MaxTables = types.Int64Value(int64(updateDatabase.MaxTables))
+	plan.MaxColumnsPerTable = types.Int64Value(int64(updateDatabase.MaxColumnsPerTable))
+	plan.RetentionPeriod = types.Int64Value(updateDatabase.RetentionPeriod)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -254,11 +248,19 @@ func (r *DatabaseResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 
 	// Delete existing database
-	err := r.client.DatabaseAPI().DeleteDatabase(ctx, state.Name.ValueString())
+	deleteDatabasesResponse, err := r.client.DeleteClusterDatabaseWithResponse(ctx, r.accountID, r.clusterID, state.Name.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error deleting database",
 			"Could not delete database, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
+	if deleteDatabasesResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error deleting database",
+			fmt.Sprintf("Status: %s", deleteDatabasesResponse.Status()),
 		)
 		return
 	}
@@ -271,30 +273,20 @@ func (r *DatabaseResource) Configure(ctx context.Context, req resource.Configure
 		return
 	}
 
-	client, ok := req.ProviderData.(influxdb3.Client)
+	pd, ok := req.ProviderData.(providerData)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
 
-	r.client = client
+	r.accountID = pd.accountID
+	r.client = pd.client
+	r.clusterID = pd.clusterID
 }
 
 func (r *DatabaseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
-}
-
-func getPartitionTemplate(partitionTemplate []influxdb3.PartitionTemplate) []DatabasePartitionTemplateModel {
-	partitions := []DatabasePartitionTemplateModel{}
-	for _, partitionData := range partitionTemplate {
-		partition := DatabasePartitionTemplateModel{
-			Type:  types.StringValue(partitionData.Type),
-			Value: types.StringValue(partitionData.Value),
-		}
-		partitions = append(partitions, partition)
-	}
-	return partitions
 }

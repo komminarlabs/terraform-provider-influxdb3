@@ -1,6 +1,9 @@
 package provider
 
-import "github.com/hashicorp/terraform-plugin-framework/types"
+import (
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/komminarlabs/influxdb3"
+)
 
 // TokenModel maps InfluxDB database token schema data.
 type TokenModel struct {
@@ -17,4 +20,17 @@ type TokenModel struct {
 type TokenPermissionModel struct {
 	Action   types.String `tfsdk:"action"`
 	Resource types.String `tfsdk:"resource"`
+}
+
+func getPermissions(permissions []influxdb3.DatabaseTokenPermission) []TokenPermissionModel {
+	permissionsState := []TokenPermissionModel{}
+	for _, permission := range permissions {
+		resource, _ := permission.Resource.AsClusterDatabaseName()
+		permissionState := TokenPermissionModel{
+			Action:   types.StringPointerValue(permission.Action),
+			Resource: types.StringValue(resource),
+		}
+		permissionsState = append(permissionsState, permissionState)
+	}
+	return permissionsState
 }

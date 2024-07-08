@@ -17,21 +17,12 @@ Retrieves a database. Use this data source to retrieve information for a specifi
 
 ### Required
 
-- `name` (String) The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters.
+- `name` (String) The name of the cluster database.
 
 ### Read-Only
 
 - `account_id` (String) The ID of the account that the cluster belongs to.
 - `cluster_id` (String) The ID of the cluster that you want to manage.
-- `max_columns_per_table` (Number) The maximum number of columns per table for the cluster database. The default is `200`
-- `max_tables` (Number) The maximum number of tables for the cluster database. The default is `500`
-- `partition_template` (Attributes List) A [template](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/custom-partitions/partition-templates/) for partitioning a cluster database. (see [below for nested schema](#nestedatt--partition_template))
-- `retention_period` (Number) The retention period of the cluster database in nanoseconds. The default is `0`. If the retention period is not set or is set to `0`, the database will have infinite retention.
-
-<a id="nestedatt--partition_template"></a>
-### Nested Schema for `partition_template`
-
-Read-Only:
-
-- `type` (String) The type of the template part.
-- `value` (String) The value of the template part.
+- `max_columns_per_table` (Number) The maximum number of columns per table for the cluster database.
+- `max_tables` (Number) The maximum number of tables for the cluster database.
+- `retention_period` (Number) The retention period of the cluster database in nanoseconds.

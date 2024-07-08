@@ -9,5 +9,6 @@ terraform {
 data "influxdb3_tokens" "all" {}
 
 output "all_tokens" {
-  value = data.influxdb3_tokens.all.tokens[*].id
+  value     = data.influxdb3_tokens.all.tokens
+  sensitive = true
 }

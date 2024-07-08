@@ -51,9 +51,13 @@ provider "influxdb3" {
   account_id = "*******"
   cluster_id = "*******"
   token      = "*******"
-  url        = "https://console.influxdata.com"
+  url        = "https://console.influxdata.com/api/v0"
 }
 ```
+
+## Supported InfluxDB flavours
+
+* InfluxDB Cloud Dedicated
 
 ## Available functionalities
 
