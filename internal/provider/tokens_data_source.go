@@ -4,13 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/komminarlabs/terraform-provider-influxdb3/internal/sdk/influxdb3"
+	"github.com/komminarlabs/influxdb3"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -26,7 +23,9 @@ func NewTokensDataSource() datasource.DataSource {
 
 // TokensDataSource is the data source implementation.
 type TokensDataSource struct {
-	client influxdb3.Client
+	accountID influxdb3.UuidV4
+	client    influxdb3.ClientWithResponses
+	clusterID influxdb3.UuidV4
 }
 
 // TokensDataSourceModel describes the data source data model.
@@ -72,23 +71,17 @@ func (d *TokensDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 							Description: "The description of the database token.",
 						},
 						"id": schema.StringAttribute{
-							Required:    true,
+							Computed:    true,
 							Description: "The ID of the database token.",
 						},
 						"permissions": schema.ListNestedAttribute{
 							Computed:    true,
 							Description: "The list of permissions the database token allows.",
-							Validators: []validator.List{
-								listvalidator.UniqueValues(),
-							},
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"action": schema.StringAttribute{
 										Computed:    true,
-										Description: "The action the database token permission allows. Valid values are `read` or `write`.",
-										Validators: []validator.String{
-											stringvalidator.OneOf([]string{"read", "write"}...),
-										},
+										Description: "The action the database token permission allows.",
 									},
 									"resource": schema.StringAttribute{
 										Computed:    true,
@@ -111,16 +104,18 @@ func (d *TokensDataSource) Configure(ctx context.Context, req datasource.Configu
 		return
 	}
 
-	client, ok := req.ProviderData.(influxdb3.Client)
+	pd, ok := req.ProviderData.(providerData)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
 
-	d.client = client
+	d.accountID = pd.accountID
+	d.client = pd.client
+	d.clusterID = pd.clusterID
 }
 
 // Read refreshes the Terraform state with the latest data.
@@ -132,34 +127,32 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	readTokens, err := d.client.TokenAPI().GetTokens(ctx)
+	readTokens, err := d.client.GetDatabaseTokensWithResponse(ctx, d.accountID, d.clusterID)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error getting Tokenss",
+			"Error getting tokens",
 			err.Error(),
 		)
 		return
 	}
 
-	// Map response body to model
-	for _, token := range readTokens {
-		var permissions []TokenPermissionModel
-		for _, permissionData := range token.Permissions {
-			permissionState := TokenPermissionModel{
-				Action:   types.StringValue(permissionData.Action),
-				Resource: types.StringValue(permissionData.Resource),
-			}
-			permissions = append(permissions, permissionState)
-		}
+	if readTokens.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error getting tokens",
+			fmt.Sprintf("Status: %s", readTokens.Status()),
+		)
+		return
+	}
 
+	// Map response body to model
+	for _, token := range *readTokens.JSON200 {
 		tokenState := TokenModel{
-			AccessToken: types.StringValue(token.AccessToken),
-			AccountId:   types.StringValue(token.AccountId),
-			CreatedAt:   types.StringValue(token.CreatedAt),
-			ClusterId:   types.StringValue(token.ClusterId),
+			AccountId:   types.StringValue(token.AccountId.String()),
+			CreatedAt:   types.StringValue(token.CreatedAt.String()),
+			ClusterId:   types.StringValue(token.ClusterId.String()),
 			Description: types.StringValue(token.Description),
-			Id:          types.StringValue(token.Id),
-			Permissions: permissions,
+			Id:          types.StringValue(token.Id.String()),
+			Permissions: getPermissions(token.Permissions),
 		}
 		state.Tokens = append(state.Tokens, tokenState)
 	}

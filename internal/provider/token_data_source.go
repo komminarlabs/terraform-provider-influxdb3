@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/komminarlabs/terraform-provider-influxdb3/internal/sdk/influxdb3"
+	"github.com/komminarlabs/influxdb3"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -26,7 +24,9 @@ func NewTokenDataSource() datasource.DataSource {
 
 // TokensDataSource is the data source implementation.
 type TokenDataSource struct {
-	client influxdb3.Client
+	accountID influxdb3.UuidV4
+	client    influxdb3.ClientWithResponses
+	clusterID influxdb3.UuidV4
 }
 
 // Metadata returns the data source type name.
@@ -69,17 +69,11 @@ func (d *TokenDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 			"permissions": schema.ListNestedAttribute{
 				Computed:    true,
 				Description: "The list of permissions the database token allows.",
-				Validators: []validator.List{
-					listvalidator.UniqueValues(),
-				},
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"action": schema.StringAttribute{
 							Computed:    true,
-							Description: "The action the database token permission allows. Valid values are `read` or `write`.",
-							Validators: []validator.String{
-								stringvalidator.OneOf([]string{"read", "write"}...),
-							},
+							Description: "The action the database token permission allows.",
 						},
 						"resource": schema.StringAttribute{
 							Computed:    true,
@@ -99,17 +93,18 @@ func (d *TokenDataSource) Configure(ctx context.Context, req datasource.Configur
 		return
 	}
 
-	client, ok := req.ProviderData.(influxdb3.Client)
+	pd, ok := req.ProviderData.(providerData)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
-
 		return
 	}
 
-	d.client = client
+	d.accountID = pd.accountID
+	d.client = pd.client
+	d.clusterID = pd.clusterID
 }
 
 // Read refreshes the Terraform state with the latest data.
@@ -121,22 +116,40 @@ func (d *TokenDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		return
 	}
 
-	readToken, err := d.client.TokenAPI().GetTokenByID(ctx, state.Id.ValueString())
+	// parse the token ID
+	tokenId, err := uuid.Parse(state.Id.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error getting Tokens",
+			"Validation error. Ensure the Id is in UUID format.",
 			err.Error(),
 		)
 		return
 	}
 
+	readTokenResponse, err := d.client.GetDatabaseTokenWithResponse(ctx, d.accountID, d.clusterID, tokenId)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error getting token",
+			err.Error(),
+		)
+		return
+	}
+
+	if readTokenResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error getting token",
+			fmt.Sprintf("Status: %s", readTokenResponse.Status()),
+		)
+		return
+	}
+	readToken := *readTokenResponse.JSON200
+
 	// Overwrite items with refreshed state
-	state.AccessToken = types.StringValue(readToken.AccessToken)
-	state.AccountId = types.StringValue(readToken.AccountId)
-	state.CreatedAt = types.StringValue(readToken.CreatedAt)
-	state.ClusterId = types.StringValue(readToken.ClusterId)
+	state.AccountId = types.StringValue(readToken.AccountId.String())
+	state.CreatedAt = types.StringValue(readToken.CreatedAt.String())
+	state.ClusterId = types.StringValue(readToken.ClusterId.String())
 	state.Description = types.StringValue(readToken.Description)
-	state.Id = types.StringValue(readToken.Id)
+	state.Id = types.StringValue(readToken.Id.String())
 	state.Permissions = getPermissions(readToken.Permissions)
 
 	// Set state

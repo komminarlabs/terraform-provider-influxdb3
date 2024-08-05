@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/komminarlabs/terraform-provider-influxdb3/internal/sdk/influxdb3"
+	"github.com/komminarlabs/influxdb3"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -23,7 +23,9 @@ func NewDatabasesDataSource() datasource.DataSource {
 
 // DatabasesDataSource is the data source implementation.
 type DatabasesDataSource struct {
-	client influxdb3.Client
+	accountID influxdb3.UuidV4
+	client    influxdb3.ClientWithResponses
+	clusterID influxdb3.UuidV4
 }
 
 // DatabasesDataSourceModel describes the data source data model.
@@ -57,35 +59,19 @@ func (d *DatabasesDataSource) Schema(ctx context.Context, req datasource.SchemaR
 						},
 						"name": schema.StringAttribute{
 							Computed:    true,
-							Description: "The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters.",
+							Description: "The name of the cluster database.",
 						},
 						"max_tables": schema.Int64Attribute{
 							Computed:    true,
-							Description: "The maximum number of tables for the cluster database. The default is `500`",
+							Description: "The maximum number of tables for the cluster database.",
 						},
 						"max_columns_per_table": schema.Int64Attribute{
 							Computed:    true,
-							Description: "The maximum number of columns per table for the cluster database. The default is `200`",
+							Description: "The maximum number of columns per table for the cluster database.",
 						},
 						"retention_period": schema.Int64Attribute{
 							Computed:    true,
-							Description: "The retention period of the cluster database in nanoseconds. The default is `0`. If the retention period is not set or is set to `0`, the database will have infinite retention.",
-						},
-						"partition_template": schema.ListNestedAttribute{
-							Computed:            true,
-							MarkdownDescription: "A [template](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/custom-partitions/partition-templates/) for partitioning a cluster database.",
-							NestedObject: schema.NestedAttributeObject{
-								Attributes: map[string]schema.Attribute{
-									"type": schema.StringAttribute{
-										Computed:    true,
-										Description: "The type of the template part.",
-									},
-									"value": schema.StringAttribute{
-										Computed:    true,
-										Description: "The value of the template part.",
-									},
-								},
-							},
+							Description: "The retention period of the cluster database in nanoseconds.",
 						},
 					},
 				},
@@ -101,51 +87,50 @@ func (d *DatabasesDataSource) Configure(ctx context.Context, req datasource.Conf
 		return
 	}
 
-	client, ok := req.ProviderData.(influxdb3.Client)
+	pd, ok := req.ProviderData.(providerData)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
-
 		return
 	}
 
-	d.client = client
+	d.accountID = pd.accountID
+	d.client = pd.client
+	d.clusterID = pd.clusterID
 }
 
 // Read refreshes the Terraform state with the latest data.
 func (d *DatabasesDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var state DatabasesDataSourceModel
 
-	readDatabases, err := d.client.DatabaseAPI().GetDatabases(ctx)
+	readDatabasesResponse, err := d.client.GetClusterDatabasesWithResponse(ctx, d.accountID, d.clusterID)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Unable to list databases",
+			"Error getting Databases",
 			err.Error(),
 		)
 		return
 	}
 
-	// Map response body to model
-	for _, database := range readDatabases {
-		var partitionTemplateState []DatabasePartitionTemplateModel
-		for _, permissionData := range database.PartitionTemplate {
-			partition := DatabasePartitionTemplateModel{
-				Type:  types.StringValue(permissionData.Type),
-				Value: types.StringValue(permissionData.Value),
-			}
-			partitionTemplateState = append(partitionTemplateState, partition)
-		}
+	if readDatabasesResponse.StatusCode() != 200 {
+		resp.Diagnostics.AddError(
+			"Error getting Databases",
+			fmt.Sprintf("Status: %s", readDatabasesResponse.Status()),
+		)
+		return
+	}
 
+	// Map response body to model
+	for _, database := range *readDatabasesResponse.JSON200 {
 		databaseState := DatabaseModel{
-			AccountId:          types.StringValue(database.AccountId),
-			ClusterId:          types.StringValue(database.ClusterId),
+			AccountId:          types.StringValue(database.AccountId.String()),
+			ClusterId:          types.StringValue(database.ClusterId.String()),
 			Name:               types.StringValue(database.Name),
-			MaxTables:          types.Int64Value(database.MaxTables),
-			MaxColumnsPerTable: types.Int64Value(database.MaxColumnsPerTable),
+			MaxTables:          types.Int64Value(int64(database.MaxTables)),
+			MaxColumnsPerTable: types.Int64Value(int64(database.MaxColumnsPerTable)),
 			RetentionPeriod:    types.Int64Value(database.RetentionPeriod),
-			PartitionTemplate:  partitionTemplateState,
 		}
 		state.Databases = append(state.Databases, databaseState)
 	}

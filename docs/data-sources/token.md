@@ -33,5 +33,5 @@ Gets a database token. Use this data source to retrieve information about a data
 
 Read-Only:
 
-- `action` (String) The action the database token permission allows. Valid values are `read` or `write`.
+- `action` (String) The action the database token permission allows.
 - `resource` (String) The resource the database token permission applies to. `*` refers to all databases.

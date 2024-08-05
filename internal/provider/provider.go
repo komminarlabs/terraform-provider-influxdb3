@@ -2,8 +2,10 @@ package provider
 
 import (
 	"context"
+	"net/http"
 	"os"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -11,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/komminarlabs/terraform-provider-influxdb3/internal/sdk/influxdb3"
+	"github.com/komminarlabs/influxdb3"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -31,6 +33,12 @@ type InfluxDBProviderModel struct {
 	ClusterID types.String `tfsdk:"cluster_id"`
 	Token     types.String `tfsdk:"token"`
 	URL       types.String `tfsdk:"url"`
+}
+
+type providerData struct {
+	accountID influxdb3.UuidV4
+	client    influxdb3.ClientWithResponses
+	clusterID influxdb3.UuidV4
 }
 
 // Metadata returns the provider type name.
@@ -61,7 +69,7 @@ func (p *InfluxDBProvider) Schema(ctx context.Context, req provider.SchemaReques
 				Sensitive:   true,
 			},
 			"url": schema.StringAttribute{
-				Description: "The InfluxDB Cloud Dedicated URL",
+				Description: "The InfluxDB Cloud Dedicated Management API URL",
 				Optional:    true,
 			},
 		},
@@ -153,7 +161,7 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 			path.Root("accountID"),
 			"Missing InfluxDB V3 Account ID",
 			"The provider cannot create the InfluxDB client as there is a missing or empty value for the InfluxDB V3 Account ID. "+
-				"Set the host value in the configuration or use the INFLUXDB3_ACCOUNT_ID environment variable. "+
+				"Set the Account ID value in the configuration or use the INFLUXDB3_ACCOUNT_ID environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
 	}
@@ -163,7 +171,7 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 			path.Root("clusterID"),
 			"Missing InfluxDB V3 Cluster ID",
 			"The provider cannot create the InfluxDB client as there is a missing or empty value for the InfluxDB V3 Cluster ID. "+
-				"Set the host value in the configuration or use the INFLUXDB3_CLUSTER_ID environment variable. "+
+				"Set the Cluster ID value in the configuration or use the INFLUXDB3_CLUSTER_ID environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
 	}
@@ -173,7 +181,7 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 			path.Root("token"),
 			"Missing InfluxDB Management Token",
 			"The provider cannot create the InfluxDB client as there is a missing or empty value for the InfluxDB V3 Management Token. "+
-				"Set the host value in the configuration or use the INFLUXDB3_TOKEN environment variable. "+
+				"Set the Management Token value in the configuration or use the INFLUXDB3_TOKEN environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
 	}
@@ -183,9 +191,38 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 			path.Root("url"),
 			"Missing InfluxDB Cloud Dedicated URL",
 			"The provider cannot create the InfluxDB client as there is a missing or empty value for the InfluxDB V3 Cloud Dedicated URL. "+
-				"Set the host value in the configuration or use the INFLUXDB3_URL environment variable. "+
+				"Set the url value in the configuration or use the INFLUXDB3_URL environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
+	}
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// If any of the expected configurations are in wrong format, return
+	// errors with provider-specific guidance.
+
+	accountUUID, err := uuid.Parse(accountID)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Missing InfluxDB V3 Account ID",
+			"The provider cannot create the InfluxDB client as there is a incorrect value for the InfluxDB V3 Account ID. "+
+				"Set the Account ID value in the configuration or use the INFLUXDB3_ACCOUNT_ID environment variable. "+
+				"If either is already set, ensure the value is in UUID format.",
+		)
+		return
+	}
+
+	clusterUUID, err := uuid.Parse(clusterID)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Missing InfluxDB V3 Cluster ID",
+			"The provider cannot create the InfluxDB client as there is a incorrect value for the InfluxDB V3 Cluster ID. "+
+				"Set the Cluster ID value in the configuration or use the INFLUXDB3_CLUSTER_ID environment variable. "+
+				"If either is already set, ensure the value is in UUID format.",
+		)
+		return
 	}
 
 	if resp.Diagnostics.HasError() {
@@ -201,12 +238,11 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 	tflog.Debug(ctx, "Creating InfluxDB V3 client")
 
 	// Create a new InfluxDB client using the configuration values
-	client, err := influxdb3.New(&influxdb3.ClientConfig{
-		AccountID: accountID,
-		ClusterID: clusterID,
-		Host:      url,
-		Token:     token,
-	})
+	client, err := influxdb3.NewClientWithResponses(url, influxdb3.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		return nil
+	}))
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create InfluxDB V3 Client",
@@ -219,9 +255,14 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 
 	// Make the InfluxDB client available during DataSource and Resource
 	// type Configure methods.
-	resp.DataSourceData = client
-	resp.ResourceData = client
 
+	providerData := &providerData{
+		accountID: accountUUID,
+		client:    *client,
+		clusterID: clusterUUID,
+	}
+	resp.DataSourceData = *providerData
+	resp.ResourceData = *providerData
 	tflog.Info(ctx, "Configured InfluxDB V3 client", map[string]any{"success": true})
 }
 
