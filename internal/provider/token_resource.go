@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -119,9 +118,11 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	// Generate API request body from plan
 	var permissionsRequest []influxdb3.DatabaseTokenPermission
 	for _, permission := range plan.Permissions {
+		resource := influxdb3.DatabaseTokenPermissionResource{}
+		resource.FromClusterDatabaseName(permission.Resource.ValueString())
 		permission := influxdb3.DatabaseTokenPermission{
 			Action:   permission.Action.ValueStringPointer(),
-			Resource: (*influxdb3.DatabaseTokenPermissionResource)((unsafe.Pointer(&permission.Resource))),
+			Resource: &resource,
 		}
 		permissionsRequest = append(permissionsRequest, permission)
 	}
@@ -243,9 +244,11 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	// Generate API request body from plan
 	var permissionsRequest []influxdb3.DatabaseTokenPermission
 	for _, permission := range plan.Permissions {
+		resource := influxdb3.DatabaseTokenPermissionResource{}
+		resource.FromClusterDatabaseName(permission.Resource.ValueString())
 		permission := influxdb3.DatabaseTokenPermission{
 			Action:   permission.Action.ValueStringPointer(),
-			Resource: (*influxdb3.DatabaseTokenPermissionResource)((unsafe.Pointer(&permission.Resource))),
+			Resource: &resource,
 		}
 		permissionsRequest = append(permissionsRequest, permission)
 	}
@@ -319,7 +322,7 @@ func (r *TokenResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 		return
 	}
 
-	if deleteTokenResponse.StatusCode() != 200 {
+	if deleteTokenResponse.StatusCode() != 204 {
 		resp.Diagnostics.AddError(
 			"Error deleting token",
 			fmt.Sprintf("Status: %s", deleteTokenResponse.Status()),
