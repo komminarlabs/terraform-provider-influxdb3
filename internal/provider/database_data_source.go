@@ -63,6 +63,22 @@ func (d *DatabaseDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 				Computed:    true,
 				Description: "The retention period of the cluster database in nanoseconds.",
 			},
+			"partition_template": schema.ListNestedAttribute{
+				Computed:    true,
+				Description: "The template partitioning of the cluster database.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"type": schema.StringAttribute{
+							Computed:    true,
+							Description: "The type of template part.",
+						},
+						"value": schema.StringAttribute{
+							Computed:    true,
+							Description: "The value of template part.",
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -124,7 +140,14 @@ func (d *DatabaseDataSource) Read(ctx context.Context, req datasource.ReadReques
 	}
 
 	// Check if the database exists
-	readDatabase := getDatabaseByName(*readDatabasesResponse, databaseName.ValueString())
+	readDatabase, err := getDatabaseByName(*readDatabasesResponse, databaseName.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error getting database",
+			"Unexpected error: "+err.Error(),
+		)
+		return
+	}
 	if readDatabase == nil {
 		resp.Diagnostics.AddError(
 			"Database not found",
