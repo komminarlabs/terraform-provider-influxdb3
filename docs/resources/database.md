@@ -1,3 +1,4 @@
+---
 page_title: "influxdb3_database Resource - terraform-provider-influxdb3"
 subcategory: ""
 description: |-
