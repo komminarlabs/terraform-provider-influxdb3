@@ -29,4 +29,13 @@ Read-Only:
 - `max_columns_per_table` (Number) The maximum number of columns per table for the cluster database.
 - `max_tables` (Number) The maximum number of tables for the cluster database.
 - `name` (String) The name of the cluster database.
+- `partition_template` (Attributes List) The template partitioning of the cluster database. (see [below for nested schema](#nestedatt--databases--partition_template))
 - `retention_period` (Number) The retention period of the cluster database in nanoseconds.
+
+<a id="nestedatt--databases--partition_template"></a>
+### Nested Schema for `databases.partition_template`
+
+Read-Only:
+
+- `type` (String) The type of template part.
+- `value` (String) The value of template part.

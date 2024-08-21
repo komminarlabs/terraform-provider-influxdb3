@@ -25,4 +25,13 @@ Retrieves a database. Use this data source to retrieve information for a specifi
 - `cluster_id` (String) The ID of the cluster that you want to manage.
 - `max_columns_per_table` (Number) The maximum number of columns per table for the cluster database.
 - `max_tables` (Number) The maximum number of tables for the cluster database.
+- `partition_template` (Attributes List) The template partitioning of the cluster database. (see [below for nested schema](#nestedatt--partition_template))
 - `retention_period` (Number) The retention period of the cluster database in nanoseconds.
+
+<a id="nestedatt--partition_template"></a>
+### Nested Schema for `partition_template`
+
+Read-Only:
+
+- `type` (String) The type of template part.
+- `value` (String) The value of template part.

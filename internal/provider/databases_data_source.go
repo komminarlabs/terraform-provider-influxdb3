@@ -73,6 +73,22 @@ func (d *DatabasesDataSource) Schema(ctx context.Context, req datasource.SchemaR
 							Computed:    true,
 							Description: "The retention period of the cluster database in nanoseconds.",
 						},
+						"partition_template": schema.ListNestedAttribute{
+							Computed:    true,
+							Description: "The template partitioning of the cluster database.",
+							NestedObject: schema.NestedAttributeObject{
+								Attributes: map[string]schema.Attribute{
+									"type": schema.StringAttribute{
+										Computed:    true,
+										Description: "The type of template part.",
+									},
+									"value": schema.StringAttribute{
+										Computed:    true,
+										Description: "The value of template part.",
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -124,12 +140,22 @@ func (d *DatabasesDataSource) Read(ctx context.Context, req datasource.ReadReque
 
 	// Map response body to model
 	for _, database := range *readDatabasesResponse.JSON200 {
+		partitionTemplate, err := getPartitionTemplate(database.PartitionTemplate)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error getting Databases",
+				err.Error(),
+			)
+			return
+		}
+
 		databaseState := DatabaseModel{
 			AccountId:          types.StringValue(database.AccountId.String()),
 			ClusterId:          types.StringValue(database.ClusterId.String()),
-			Name:               types.StringValue(database.Name),
 			MaxTables:          types.Int64Value(int64(database.MaxTables)),
 			MaxColumnsPerTable: types.Int64Value(int64(database.MaxColumnsPerTable)),
+			Name:               types.StringValue(database.Name),
+			PartitionTemplate:  partitionTemplate,
 			RetentionPeriod:    types.Int64Value(database.RetentionPeriod),
 		}
 		state.Databases = append(state.Databases, databaseState)
