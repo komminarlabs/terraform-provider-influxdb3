@@ -57,7 +57,7 @@ provider "influxdb3" {
 
 ## Supported InfluxDB flavours
 
-* InfluxDB Cloud Dedicated
+* [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
 
 ## Available functionalities
 
