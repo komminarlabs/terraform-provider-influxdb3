@@ -1,3 +1,9 @@
+## [1.2.2] - 2024-09-12
+
+### Added:
+
+* Added [retry mechanism](github.com/hashicorp/go-retryablehttp) to retry InfluxDB v3 API request at least 3 times before erroring.
+
 ## [1.2.1] - 2024-08-21
 
 ### Fixed:
