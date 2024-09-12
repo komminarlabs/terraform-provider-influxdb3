@@ -4,8 +4,10 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -238,11 +240,19 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 	tflog.Debug(ctx, "Creating InfluxDB V3 client")
 
 	// Create a new InfluxDB client using the configuration values
+
+	// Create a new retryable HTTP client with exponential backoff
+	retryClient := retryablehttp.NewClient()
+	retryClient.Backoff = retryablehttp.LinearJitterBackoff
+	retryClient.RetryWaitMin = 1 * time.Second
+	retryClient.RetryWaitMax = 5 * time.Second
+	retryClient.RetryMax = 3
+
 	client, err := influxdb3.NewClientWithResponses(url, influxdb3.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
 		return nil
-	}))
+	}), influxdb3.WithHTTPClient(retryClient.StandardClient()))
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create InfluxDB V3 Client",
