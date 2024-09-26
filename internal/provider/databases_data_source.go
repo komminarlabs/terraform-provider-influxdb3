@@ -124,16 +124,24 @@ func (d *DatabasesDataSource) Read(ctx context.Context, req datasource.ReadReque
 	readDatabasesResponse, err := d.client.GetClusterDatabasesWithResponse(ctx, d.accountID, d.clusterID)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error getting Databases",
+			"Error getting databases",
 			err.Error(),
 		)
 		return
 	}
 
 	if readDatabasesResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
-			"Error getting Databases",
-			fmt.Sprintf("Status: %s", readDatabasesResponse.Status()),
+			"Error getting databases",
+			errMsg,
 		)
 		return
 	}
@@ -143,7 +151,7 @@ func (d *DatabasesDataSource) Read(ctx context.Context, req datasource.ReadReque
 		partitionTemplate, err := getPartitionTemplate(database.PartitionTemplate)
 		if err != nil {
 			resp.Diagnostics.AddError(
-				"Error getting Databases",
+				"Error getting databases",
 				err.Error(),
 			)
 			return

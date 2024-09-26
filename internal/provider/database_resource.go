@@ -188,9 +188,17 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	if createDatabaseResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(createDatabaseResponse, createDatabaseResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error creating database",
-			fmt.Sprintf("Status: %s", createDatabaseResponse.Status()),
+			errMsg,
 		)
 		return
 	}
@@ -243,9 +251,17 @@ func (r *DatabaseResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	if readDatabasesResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error getting database",
-			fmt.Sprintf("Status: %s", readDatabasesResponse.Status()),
+			errMsg,
 		)
 		return
 	}
@@ -307,9 +323,17 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 	}
 
 	if updateDatabaseResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(updateDatabaseResponse, updateDatabaseResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error updating database",
-			fmt.Sprintf("Status: %s", updateDatabaseResponse.Status()),
+			errMsg,
 		)
 		return
 	}
@@ -351,9 +375,17 @@ func (r *DatabaseResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 
 	if deleteDatabasesResponse.StatusCode() != 204 {
+		errMsg, err := formatErrorResponse(deleteDatabasesResponse, deleteDatabasesResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error deleting database",
-			fmt.Sprintf("Status: %s", deleteDatabasesResponse.Status()),
+			errMsg,
 		)
 		return
 	}
