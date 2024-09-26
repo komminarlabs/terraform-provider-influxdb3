@@ -127,7 +127,7 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	readTokens, err := d.client.GetDatabaseTokensWithResponse(ctx, d.accountID, d.clusterID)
+	readTokensResponse, err := d.client.GetDatabaseTokensWithResponse(ctx, d.accountID, d.clusterID)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error getting tokens",
@@ -136,16 +136,24 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	if readTokens.StatusCode() != 200 {
+	if readTokensResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(readTokensResponse, readTokensResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error getting tokens",
-			fmt.Sprintf("Status: %s", readTokens.Status()),
+			errMsg,
 		)
 		return
 	}
 
 	// Map response body to model
-	for _, token := range *readTokens.JSON200 {
+	for _, token := range *readTokensResponse.JSON200 {
 		tokenState := TokenModel{
 			AccountId:   types.StringValue(token.AccountId.String()),
 			CreatedAt:   types.StringValue(token.CreatedAt.String()),

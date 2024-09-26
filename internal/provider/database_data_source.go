@@ -132,9 +132,17 @@ func (d *DatabaseDataSource) Read(ctx context.Context, req datasource.ReadReques
 	}
 
 	if readDatabasesResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error getting database",
-			fmt.Sprintf("Status: %s", readDatabasesResponse.Status()),
+			errMsg,
 		)
 		return
 	}

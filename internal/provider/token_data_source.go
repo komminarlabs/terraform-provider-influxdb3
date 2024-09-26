@@ -136,9 +136,17 @@ func (d *TokenDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	}
 
 	if readTokenResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(readTokenResponse, readTokenResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error getting token",
-			fmt.Sprintf("Status: %s", readTokenResponse.Status()),
+			errMsg,
 		)
 		return
 	}

@@ -142,9 +142,17 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	if createTokenResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(createTokenResponse, createTokenResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error creating token",
-			fmt.Sprintf("Status: %s", createTokenResponse.Status()),
+			errMsg,
 		)
 		return
 	}
@@ -198,9 +206,17 @@ func (r *TokenResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 
 	if readTokenResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(readTokenResponse, readTokenResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error getting token",
-			fmt.Sprintf("Status: %s", readTokenResponse.Status()),
+			errMsg,
 		)
 		return
 	}
@@ -269,9 +285,17 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	if updateTokenResponse.StatusCode() != 200 {
+		errMsg, err := formatErrorResponse(updateTokenResponse, updateTokenResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error updating token",
-			fmt.Sprintf("Status: %s", updateTokenResponse.Status()),
+			errMsg,
 		)
 		return
 	}
@@ -323,9 +347,17 @@ func (r *TokenResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	if deleteTokenResponse.StatusCode() != 204 {
+		errMsg, err := formatErrorResponse(deleteTokenResponse, deleteTokenResponse.StatusCode())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error formatting error response",
+				err.Error(),
+			)
+			return
+		}
 		resp.Diagnostics.AddError(
 			"Error deleting token",
-			fmt.Sprintf("Status: %s", deleteTokenResponse.Status()),
+			errMsg,
 		)
 		return
 	}
