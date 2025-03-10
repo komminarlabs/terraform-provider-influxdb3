@@ -139,18 +139,35 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTimeFormatType)(pt.Type.ValueStringPointer()),
 				Value: pt.Value.ValueStringPointer(),
 			}
-			t.MergeClusterDatabasePartitionTemplatePartTimeFormat(timeTemplate)
+
+			err := t.MergeClusterDatabasePartitionTemplatePartTimeFormat(timeTemplate)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error creating database partition template",
+					"Failed to merge time template: "+err.Error(),
+				)
+				return
+			}
 		} else if pt.Type.ValueString() == "tag" {
 			tagTemplate := influxdb3.ClusterDatabasePartitionTemplatePartTagValue{
 				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTagValueType)(pt.Type.ValueStringPointer()),
 				Value: pt.Value.ValueStringPointer(),
 			}
-			t.MergeClusterDatabasePartitionTemplatePartTagValue(tagTemplate)
+
+			err := t.MergeClusterDatabasePartitionTemplatePartTagValue(tagTemplate)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error creating database partition template",
+					"Failed to merge tag template: "+err.Error(),
+				)
+				return
+			}
 		} else if pt.Type.ValueString() == "bucket" {
 			var encodedJSONData struct {
 				NumberOfBuckets *int32  `json:"numberOfBuckets,omitempty"`
 				TagName         *string `json:"tagName,omitempty"`
 			}
+
 			err := json.Unmarshal([]byte(pt.Value.ValueString()), &encodedJSONData)
 			if err != nil {
 				resp.Diagnostics.AddError(
@@ -163,7 +180,15 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartBucketType)(pt.Type.ValueStringPointer()),
 				Value: &encodedJSONData,
 			}
-			t.MergeClusterDatabasePartitionTemplatePartBucket(bucketTemplate)
+
+			err = t.MergeClusterDatabasePartitionTemplatePartBucket(bucketTemplate)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error creating database partition template",
+					"Failed to merge bucket template: "+err.Error(),
+				)
+				return
+			}
 		}
 		partitionTemplates = append(partitionTemplates, t)
 	}

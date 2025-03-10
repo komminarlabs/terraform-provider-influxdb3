@@ -69,12 +69,18 @@ func getPartitionTemplate(partitionTemplates *influxdb3.ClusterDatabasePartition
 			return nil, err
 		}
 
-		json.Unmarshal(b, &partitionTemplate)
-		if partitionTemplate["type"] == "time" || partitionTemplate["type"] == "tag" {
-			partitionTemplateModels = append(partitionTemplateModels, DatabasePartitionTemplateModel{
-				Type:  types.StringValue(partitionTemplate["type"].(string)),
-				Value: types.StringValue(partitionTemplate["value"].(string)),
-			})
+		err = json.Unmarshal(b, &partitionTemplate)
+		if err != nil {
+			return nil, err
+		}
+
+		if partitionType, ok := partitionTemplate["type"].(string); ok && (partitionType == "time" || partitionType == "tag") {
+			if partitionValue, ok := partitionTemplate["value"].(string); ok {
+				partitionTemplateModels = append(partitionTemplateModels, DatabasePartitionTemplateModel{
+					Type:  types.StringValue(partitionType),
+					Value: types.StringValue(partitionValue),
+				})
+			}
 		} else if partitionTemplate["type"] == "bucket" {
 			jsonEncoded, err := json.Marshal(partitionTemplate["value"])
 			if err != nil {
@@ -82,7 +88,7 @@ func getPartitionTemplate(partitionTemplates *influxdb3.ClusterDatabasePartition
 			}
 
 			partitionTemplateModels = append(partitionTemplateModels, DatabasePartitionTemplateModel{
-				Type:  types.StringValue(partitionTemplate["type"].(string)),
+				Type:  types.StringValue(partitionType),
 				Value: types.StringValue(string(jsonEncoded)),
 			})
 		}
