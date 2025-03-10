@@ -18,6 +18,13 @@ import (
 	"github.com/komminarlabs/influxdb3"
 )
 
+// INFLUXDB3_HOST is the default InfluxDB V3 API host.
+// INFLUXDB3_API_ENDPOINT is the default InfluxDB V3 API endpoint.
+const (
+	INFLUXDB3_HOST         = "https://console.influxdata.com"
+	INFLUXDB3_API_ENDPOINT = "/api/v0"
+)
+
 // Ensure the implementation satisfies the expected interfaces.
 var _ provider.Provider = &InfluxDBProvider{}
 
@@ -34,7 +41,6 @@ type InfluxDBProviderModel struct {
 	AccountID types.String `tfsdk:"account_id"`
 	ClusterID types.String `tfsdk:"cluster_id"`
 	Token     types.String `tfsdk:"token"`
-	URL       types.String `tfsdk:"url"`
 }
 
 type providerData struct {
@@ -69,10 +75,6 @@ func (p *InfluxDBProvider) Schema(ctx context.Context, req provider.SchemaReques
 				Description: "The InfluxDB management token",
 				Optional:    true,
 				Sensitive:   true,
-			},
-			"url": schema.StringAttribute{
-				Description: "The InfluxDB Cloud Dedicated Management API URL",
-				Optional:    true,
 			},
 		},
 	}
@@ -118,15 +120,6 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 		)
 	}
 
-	if config.URL.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("url"),
-			"Unknown InfluxDB V3 Cloud Dedicated URL",
-			"The provider cannot create the InfluxDB client as there is an unknown configuration value for the InfluxDB V3 Cloud Dedicated URL. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the INFLUXDB3_URL environment variable.",
-		)
-	}
-
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -137,7 +130,6 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 	accountID := os.Getenv("INFLUXDB3_ACCOUNT_ID")
 	clusterID := os.Getenv("INFLUXDB3_CLUSTER_ID")
 	token := os.Getenv("INFLUXDB3_TOKEN")
-	url := os.Getenv("INFLUXDB3_URL")
 
 	if !config.AccountID.IsNull() {
 		accountID = config.AccountID.ValueString()
@@ -151,9 +143,8 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 		token = config.Token.ValueString()
 	}
 
-	if !config.URL.IsNull() {
-		url = config.URL.ValueString()
-	}
+	// Combine host and endpoint
+	url := INFLUXDB3_HOST + INFLUXDB3_API_ENDPOINT
 
 	// If any of the expected configurations are missing, return
 	// errors with provider-specific guidance.
@@ -184,16 +175,6 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 			"Missing InfluxDB Management Token",
 			"The provider cannot create the InfluxDB client as there is a missing or empty value for the InfluxDB V3 Management Token. "+
 				"Set the Management Token value in the configuration or use the INFLUXDB3_TOKEN environment variable. "+
-				"If either is already set, ensure the value is not empty.",
-		)
-	}
-
-	if url == "" {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("url"),
-			"Missing InfluxDB Cloud Dedicated URL",
-			"The provider cannot create the InfluxDB client as there is a missing or empty value for the InfluxDB V3 Cloud Dedicated URL. "+
-				"Set the url value in the configuration or use the INFLUXDB3_URL environment variable. "+
 				"If either is already set, ensure the value is not empty.",
 		)
 	}
