@@ -24,8 +24,8 @@ Gets all databases for a cluster.
 
 Read-Only:
 
-- `account_id` (String) The ID of the account that the cluster belongs to.
-- `cluster_id` (String) The ID of the cluster that you want to manage.
+- `account_id` (String) The ID of the account that the database belongs to.
+- `cluster_id` (String) The ID of the cluster that the database belongs to.
 - `max_columns_per_table` (Number) The maximum number of columns per table for the cluster database.
 - `max_tables` (Number) The maximum number of tables for the cluster database.
 - `name` (String) The name of the cluster database.

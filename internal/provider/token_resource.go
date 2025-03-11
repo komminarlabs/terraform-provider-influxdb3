@@ -119,7 +119,16 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	var permissionsRequest []influxdb3.DatabaseTokenPermission
 	for _, permission := range plan.Permissions {
 		resource := influxdb3.DatabaseTokenPermissionResource{}
-		resource.FromClusterDatabaseName(permission.Resource.ValueString())
+
+		err := resource.FromClusterDatabaseName(permission.Resource.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Validation error. Ensure the Resource is in the correct format.",
+				err.Error(),
+			)
+			return
+		}
+
 		permission := influxdb3.DatabaseTokenPermission{
 			Action:   permission.Action.ValueStringPointer(),
 			Resource: &resource,
@@ -261,7 +270,16 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	var permissionsRequest []influxdb3.DatabaseTokenPermission
 	for _, permission := range plan.Permissions {
 		resource := influxdb3.DatabaseTokenPermissionResource{}
-		resource.FromClusterDatabaseName(permission.Resource.ValueString())
+
+		err := resource.FromClusterDatabaseName(permission.Resource.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Validation error. Ensure the Resource is in the correct format.",
+				err.Error(),
+			)
+			return
+		}
+
 		permission := influxdb3.DatabaseTokenPermission{
 			Action:   permission.Action.ValueStringPointer(),
 			Resource: &resource,

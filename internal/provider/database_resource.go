@@ -53,15 +53,15 @@ func (r *DatabaseResource) Schema(ctx context.Context, req resource.SchemaReques
 		Attributes: map[string]schema.Attribute{
 			"account_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "The ID of the account that the cluster belongs to.",
+				Description: "The ID of the account that the database belongs to.",
 			},
 			"cluster_id": schema.StringAttribute{
 				Computed:    true,
-				Description: "The ID of the cluster that you want to manage.",
+				Description: "The ID of the cluster that the database belongs to.",
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters. **Note:** Database names can't be updated.  An update will result in resource replacement. After a database is deleted, you cannot [reuse](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/databases/delete/#cannot-reuse-database-names) the same name for a new database.",
+				Description: "The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters. **Note:** Database names can't be updated. An update will result in resource replacement. After a database is deleted, you cannot [reuse](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/databases/delete/#cannot-reuse-database-names) the same name for a new database.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -139,18 +139,35 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTimeFormatType)(pt.Type.ValueStringPointer()),
 				Value: pt.Value.ValueStringPointer(),
 			}
-			t.MergeClusterDatabasePartitionTemplatePartTimeFormat(timeTemplate)
+
+			err := t.MergeClusterDatabasePartitionTemplatePartTimeFormat(timeTemplate)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error creating database partition template",
+					"Failed to merge time template: "+err.Error(),
+				)
+				return
+			}
 		} else if pt.Type.ValueString() == "tag" {
 			tagTemplate := influxdb3.ClusterDatabasePartitionTemplatePartTagValue{
 				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTagValueType)(pt.Type.ValueStringPointer()),
 				Value: pt.Value.ValueStringPointer(),
 			}
-			t.MergeClusterDatabasePartitionTemplatePartTagValue(tagTemplate)
+
+			err := t.MergeClusterDatabasePartitionTemplatePartTagValue(tagTemplate)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error creating database partition template",
+					"Failed to merge tag template: "+err.Error(),
+				)
+				return
+			}
 		} else if pt.Type.ValueString() == "bucket" {
 			var encodedJSONData struct {
 				NumberOfBuckets *int32  `json:"numberOfBuckets,omitempty"`
 				TagName         *string `json:"tagName,omitempty"`
 			}
+
 			err := json.Unmarshal([]byte(pt.Value.ValueString()), &encodedJSONData)
 			if err != nil {
 				resp.Diagnostics.AddError(
@@ -163,7 +180,15 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartBucketType)(pt.Type.ValueStringPointer()),
 				Value: &encodedJSONData,
 			}
-			t.MergeClusterDatabasePartitionTemplatePartBucket(bucketTemplate)
+
+			err = t.MergeClusterDatabasePartitionTemplatePartBucket(bucketTemplate)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error creating database partition template",
+					"Failed to merge bucket template: "+err.Error(),
+				)
+				return
+			}
 		}
 		partitionTemplates = append(partitionTemplates, t)
 	}

@@ -51,11 +51,11 @@ func (d *DatabasesDataSource) Schema(ctx context.Context, req datasource.SchemaR
 					Attributes: map[string]schema.Attribute{
 						"account_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "The ID of the account that the cluster belongs to.",
+							Description: "The ID of the account that the database belongs to.",
 						},
 						"cluster_id": schema.StringAttribute{
 							Computed:    true,
-							Description: "The ID of the cluster that you want to manage.",
+							Description: "The ID of the cluster that the database belongs to.",
 						},
 						"name": schema.StringAttribute{
 							Computed:    true,

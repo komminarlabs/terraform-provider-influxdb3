@@ -34,7 +34,4 @@ func testAccPreCheck(t *testing.T) {
 	if v := os.Getenv("INFLUXDB3_TOKEN"); v == "" {
 		t.Fatal("INFLUXDB3_TOKEN must be set for acceptance tests")
 	}
-	if v := os.Getenv("INFLUXDB3_URL"); v == "" {
-		t.Fatal("INFLUXDB3_URL must be set for acceptance tests")
-	}
 }

@@ -51,7 +51,6 @@ provider "influxdb3" {
   account_id = "*******"
   cluster_id = "*******"
   token      = "*******"
-  url        = "https://console.influxdata.com/api/v0"
 }
 ```
 

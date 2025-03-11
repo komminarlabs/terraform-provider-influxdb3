@@ -45,7 +45,7 @@ resource "influxdb3_database" "signals" {
 
 ### Required
 
-- `name` (String) The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters. **Note:** Database names can't be updated.  An update will result in resource replacement. After a database is deleted, you cannot [reuse](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/databases/delete/#cannot-reuse-database-names) the same name for a new database.
+- `name` (String) The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters. **Note:** Database names can't be updated. An update will result in resource replacement. After a database is deleted, you cannot [reuse](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/databases/delete/#cannot-reuse-database-names) the same name for a new database.
 
 ### Optional
 
@@ -56,8 +56,8 @@ resource "influxdb3_database" "signals" {
 
 ### Read-Only
 
-- `account_id` (String) The ID of the account that the cluster belongs to.
-- `cluster_id` (String) The ID of the cluster that you want to manage.
+- `account_id` (String) The ID of the account that the database belongs to.
+- `cluster_id` (String) The ID of the cluster that the database belongs to.
 
 <a id="nestedatt--partition_template"></a>
 ### Nested Schema for `partition_template`
