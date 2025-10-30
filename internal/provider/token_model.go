@@ -2,7 +2,7 @@ package provider
 
 import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/komminarlabs/influxdb3"
+	influxdb3 "github.com/thulasirajkomminar/influxdb3-management-go"
 )
 
 // TokenModel maps InfluxDB database token schema data.
