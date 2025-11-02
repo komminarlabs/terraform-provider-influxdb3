@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	influxdb3 "github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go"
 )
 
 // INFLUXDB3_HOST is the default InfluxDB V3 API host.

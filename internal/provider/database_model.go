@@ -5,7 +5,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	influxdb3 "github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go"
 )
 
 // DatabaseModel maps InfluxDB database schema data.
