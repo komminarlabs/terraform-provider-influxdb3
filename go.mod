@@ -1,4 +1,4 @@
-module github.com/komminarlabs/terraform-provider-influxdb3
+module github.com/thulasirajkomminar/terraform-provider-influxdb3
 
 go 1.24.0
 
@@ -11,7 +11,7 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.29.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-testing v1.13.3
-	github.com/komminarlabs/influxdb3 v0.1.2
+	github.com/thulasirajkomminar/influxdb3-management-go v0.2.0
 )
 
 require (
@@ -60,7 +60,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/oapi-codegen/runtime v1.1.1 // indirect
+	github.com/oapi-codegen/runtime v1.1.2 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/posener/complete v1.2.3 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect

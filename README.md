@@ -38,7 +38,7 @@ Add the below code to your configuration.
 terraform {
   required_providers {
     influxdb3 = {
-      source = "komminarlabs/influxdb3"
+      source = "thulasirajkomminar/influxdb3"
     }
   }
 }
