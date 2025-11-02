@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strconv"
 
-	influxdb3 "github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go"
 )
 
 // formatErrorResponse formats the error response from the InfluxDB API.
