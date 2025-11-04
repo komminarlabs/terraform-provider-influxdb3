@@ -159,7 +159,7 @@ func (d *TokenDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	// Overwrite items with refreshed state
 	state.AccountId = types.StringValue(readToken.AccountId.String())
-	state.CreatedAt = types.StringValue(readToken.CreatedAt.String())
+	state.CreatedAt = types.StringValue(readToken.CreatedAt.Format(time.RFC3339Nano))
 	state.ClusterId = types.StringValue(readToken.ClusterId.String())
 	state.Description = types.StringValue(readToken.Description)
 	state.Id = types.StringValue(readToken.Id.String())

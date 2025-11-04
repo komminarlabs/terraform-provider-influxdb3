@@ -161,7 +161,7 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	for _, token := range *readTokensResponse.JSON200 {
 		tokenState := TokenModel{
 			AccountId:   types.StringValue(token.AccountId.String()),
-			CreatedAt:   types.StringValue(token.CreatedAt.String()),
+			CreatedAt:   types.StringValue(token.CreatedAt.Format(time.RFC3339Nano)),
 			ClusterId:   types.StringValue(token.ClusterId.String()),
 			Description: types.StringValue(token.Description),
 			Id:          types.StringValue(token.Id.String()),

@@ -193,7 +193,7 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	// Map response body to schema and populate Computed attribute values
 	plan.AccessToken = types.StringValue(createToken.AccessToken)
 	plan.AccountId = types.StringValue(createToken.AccountId.String())
-	plan.CreatedAt = types.StringValue(createToken.CreatedAt.String())
+	plan.CreatedAt = types.StringValue(createToken.CreatedAt.Format(time.RFC3339Nano))
 	plan.ClusterId = types.StringValue(createToken.ClusterId.String())
 	plan.Description = types.StringValue(createToken.Description)
 	plan.Id = types.StringValue(createToken.Id.String())
@@ -260,7 +260,7 @@ func (r *TokenResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	// Overwrite items with refreshed state
 	state.AccountId = types.StringValue(readToken.AccountId.String())
-	state.CreatedAt = types.StringValue(readToken.CreatedAt.String())
+	state.CreatedAt = types.StringValue(readToken.CreatedAt.Format(time.RFC3339Nano))
 	state.ClusterId = types.StringValue(readToken.ClusterId.String())
 	state.Description = types.StringValue(readToken.Description)
 	state.Id = types.StringValue(readToken.Id.String())
@@ -352,7 +352,7 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	// Overwrite items with refreshed state
 	plan.AccountId = types.StringValue(updateToken.AccountId.String())
-	plan.CreatedAt = types.StringValue(updateToken.CreatedAt.String())
+	plan.CreatedAt = types.StringValue(updateToken.CreatedAt.Format(time.RFC3339Nano))
 	plan.ClusterId = types.StringValue(updateToken.ClusterId.String())
 	plan.Description = types.StringValue(updateToken.Description)
 	plan.Id = types.StringValue(updateToken.Id.String())
