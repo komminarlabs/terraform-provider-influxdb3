@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -71,6 +72,16 @@ func (r *TokenResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"description": schema.StringAttribute{
 				Required:    true,
 				Description: "The description of the database token.",
+			},
+			"expires_at": schema.StringAttribute{
+				Optional:    true,
+				Description: "The date and time that the database token expires, if applicable. Uses RFC3339 format(for example: 2020-01-01T00:00:00Z).",
+				Validators: []validator.String{
+					rfc3339Validator{},
+				},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -141,6 +152,18 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 		Permissions: &permissionsRequest,
 	}
 
+	if !plan.ExpiresAt.IsNull() && !plan.ExpiresAt.IsUnknown() {
+		t, err := time.Parse(time.RFC3339, plan.ExpiresAt.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error parsing expires_at",
+				err.Error(),
+			)
+			return
+		}
+		createTokenRequest.ExpiresAt = &t
+	}
+
 	createTokenResponse, err := r.client.CreateDatabaseTokenWithResponse(ctx, r.accountID, r.clusterID, createTokenRequest)
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -175,6 +198,10 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	plan.Description = types.StringValue(createToken.Description)
 	plan.Id = types.StringValue(createToken.Id.String())
 	plan.Permissions = getPermissions(createToken.Permissions)
+
+	if createToken.ExpiresAt != nil {
+		plan.ExpiresAt = types.StringValue(createToken.ExpiresAt.Format(time.RFC3339))
+	}
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -238,6 +265,10 @@ func (r *TokenResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	state.Description = types.StringValue(readToken.Description)
 	state.Id = types.StringValue(readToken.Id.String())
 	state.Permissions = getPermissions(readToken.Permissions)
+
+	if readToken.ExpiresAt != nil {
+		state.ExpiresAt = types.StringValue(readToken.ExpiresAt.Format(time.RFC3339))
+	}
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -326,6 +357,10 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	plan.Description = types.StringValue(updateToken.Description)
 	plan.Id = types.StringValue(updateToken.Id.String())
 	plan.Permissions = getPermissions(updateToken.Permissions)
+
+	if updateToken.ExpiresAt != nil {
+		plan.ExpiresAt = types.StringValue(updateToken.ExpiresAt.Format(time.RFC3339))
+	}
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)

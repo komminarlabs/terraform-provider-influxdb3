@@ -26,6 +26,7 @@ Gets a database token. Use this data source to retrieve information about a data
 - `cluster_id` (String) The ID of the cluster that the database token belongs to.
 - `created_at` (String) The date and time that the database token was created. Uses RFC3339 format.
 - `description` (String) The description of the database token.
+- `expires_at` (String) The date and time that the database token expires, if applicable. Uses RFC3339 format.
 - `permissions` (Attributes List) The list of permissions the database token allows. (see [below for nested schema](#nestedatt--permissions))
 
 <a id="nestedatt--permissions"></a>

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -69,6 +70,10 @@ func (d *TokensDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 						"description": schema.StringAttribute{
 							Computed:    true,
 							Description: "The description of the database token.",
+						},
+						"expires_at": schema.StringAttribute{
+							Computed:    true,
+							Description: "The date and time that the database token expires, if applicable. Uses RFC3339 format.",
 						},
 						"id": schema.StringAttribute{
 							Computed:    true,
@@ -162,6 +167,11 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 			Id:          types.StringValue(token.Id.String()),
 			Permissions: getPermissions(token.Permissions),
 		}
+
+		if token.ExpiresAt != nil {
+			tokenState.ExpiresAt = types.StringValue(token.ExpiresAt.Format(time.RFC3339))
+		}
+
 		state.Tokens = append(state.Tokens, tokenState)
 	}
 

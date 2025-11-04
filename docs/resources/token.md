@@ -20,6 +20,10 @@ Creates and manages a token and returns the generated database token. Use this r
 - `description` (String) The description of the database token.
 - `permissions` (Attributes List) The list of permissions the database token allows. (see [below for nested schema](#nestedatt--permissions))
 
+### Optional
+
+- `expires_at` (String) The date and time that the database token expires, if applicable. Uses RFC3339 format(for example: 2020-01-01T00:00:00Z).
+
 ### Read-Only
 
 - `access_token` (String, Sensitive) The access token that can be used to authenticate query and write requests to the cluster. The access token is never stored by InfluxDB and is only returned once when the token is created. If the access token is lost, a new token must be created.
