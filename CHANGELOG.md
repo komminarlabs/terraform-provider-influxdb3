@@ -5,6 +5,16 @@ All notable changes to this project will automatically be documented in this fil
 The format is based on vKeep a Changelog(https://keepachangelog.com/en/1.0.0/),
 and this project adheres to vSemantic Versioning(https://semver.org/spec/v2.0.0.html).
 
+## v1.5.0 - 2025-11-05
+
+### What's Changed
+
+* Added new `expires_at` attribute in token resource and data source to set and get the expiration time of the token.
+
+### Fixed
+
+* Fixed the `created_at` attributes in token resource and data source to use RFC3339Nano format for better precision.
+
 ## v1.4.0 - 2025-10-30
 
 ### What's Changed
