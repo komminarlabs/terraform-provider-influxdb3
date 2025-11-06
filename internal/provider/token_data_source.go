@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -61,6 +62,10 @@ func (d *TokenDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 			"description": schema.StringAttribute{
 				Computed:    true,
 				Description: "The description of the database token.",
+			},
+			"expires_at": schema.StringAttribute{
+				Computed:    true,
+				Description: "The date and time that the database token expires, if applicable. Uses RFC3339 format.",
 			},
 			"id": schema.StringAttribute{
 				Required:    true,
@@ -154,11 +159,15 @@ func (d *TokenDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 
 	// Overwrite items with refreshed state
 	state.AccountId = types.StringValue(readToken.AccountId.String())
-	state.CreatedAt = types.StringValue(readToken.CreatedAt.String())
+	state.CreatedAt = types.StringValue(readToken.CreatedAt.Format(time.RFC3339Nano))
 	state.ClusterId = types.StringValue(readToken.ClusterId.String())
 	state.Description = types.StringValue(readToken.Description)
 	state.Id = types.StringValue(readToken.Id.String())
 	state.Permissions = getPermissions(readToken.Permissions)
+
+	if readToken.ExpiresAt != nil {
+		state.ExpiresAt = types.StringValue(readToken.ExpiresAt.Format(time.RFC3339))
+	}
 
 	// Set state
 	diags := resp.State.Set(ctx, &state)
