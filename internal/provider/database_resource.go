@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -14,9 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/thulasirajkomminar/influxdb3-management-go"
 )
 
@@ -61,12 +62,13 @@ func (r *DatabaseResource) Schema(ctx context.Context, req resource.SchemaReques
 			},
 			"name": schema.StringAttribute{
 				Required:    true,
-				Description: "The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters. **Note:** Database names can't be updated. An update will result in resource replacement. After a database is deleted, you cannot [reuse](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/databases/delete/#cannot-reuse-database-names) the same name for a new database.",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
+				Description: "The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters. See the full naming restrictions [here](https://docs.influxdata.com/influxdb3/cloud-dedicated/admin/databases/create/#database-naming-restrictions). <br> **Note:** [Renaming](https://docs.influxdata.com/influxdb3/cloud-dedicated/admin/databases/rename/) a database does not change the database ID, modify data in the database, or update database tokens. After renaming a database, any existing database tokens will stop working and you must create new tokens with permissions for the renamed database. If you create a new database using the previous database name, tokens associated with that database name will grant access to the newly created database.",
 				Validators: []validator.String{
 					stringvalidator.LengthBetween(1, 64),
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_\-/]*$`),
+						"must start with a letter or number and only contain alphanumeric characters, underscores (_), dashes (-), and forward-slashes (/)",
+					),
 				},
 			},
 			"max_tables": schema.Int64Attribute{
@@ -321,62 +323,125 @@ func (r *DatabaseResource) Read(ctx context.Context, req resource.ReadRequest, r
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan DatabaseModel
+	var state DatabaseModel
 
-	// Read Terraform plan data into the model
+	// Read Terraform plan and state data into the model
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Generate API request body from plan
-	maxTables := int32(plan.MaxTables.ValueInt64())
-	maxColumnsPerTable := int32(plan.MaxColumnsPerTable.ValueInt64())
-	updateDatabaseRequest := influxdb3.UpdateClusterDatabaseJSONRequestBody{
-		MaxTables:          &maxTables,
-		MaxColumnsPerTable: &maxColumnsPerTable,
-		RetentionPeriod:    plan.RetentionPeriod.ValueInt64Pointer(),
-	}
+	nameChanged := !plan.Name.Equal(state.Name)
+	otherFieldsChanged := !plan.MaxTables.Equal(state.MaxTables) ||
+		!plan.MaxColumnsPerTable.Equal(state.MaxColumnsPerTable) ||
+		!plan.RetentionPeriod.Equal(state.RetentionPeriod)
 
-	// Update existing database
-	updateDatabaseResponse, err := r.client.UpdateClusterDatabaseWithResponse(ctx, r.accountID, r.clusterID, plan.Name.ValueString(), updateDatabaseRequest)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error updating database",
-			"Could not update database, unexpected error: "+err.Error(),
-		)
-		return
-	}
+	// Check if name changed then call rename API
+	if nameChanged {
+		tflog.Debug(ctx, "Name change detected, calling rename database API")
 
-	if updateDatabaseResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(updateDatabaseResponse, updateDatabaseResponse.StatusCode())
+		renameDatabaseRequest := influxdb3.RenameClusterDatabaseJSONRequestBody{
+			Name: plan.Name.ValueString(),
+		}
+
+		renameDatabaseResponse, err := r.client.RenameClusterDatabaseWithResponse(ctx, r.accountID, r.clusterID, state.Name.ValueString(), renameDatabaseRequest)
 		if err != nil {
 			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
+				"Error renaming database",
+				"Could not rename database, unexpected error: "+err.Error(),
 			)
 			return
 		}
-		resp.Diagnostics.AddError(
-			"Error updating database",
-			errMsg,
-		)
-		return
-	}
-	updateDatabase := updateDatabaseResponse.JSON200
 
-	// Map response body to schema and populate Computed attribute values
-	plan.AccountId = types.StringValue(updateDatabase.AccountId.String())
-	plan.ClusterId = types.StringValue(updateDatabase.ClusterId.String())
-	plan.MaxTables = types.Int64Value(int64(updateDatabase.MaxTables))
-	plan.MaxColumnsPerTable = types.Int64Value(int64(updateDatabase.MaxColumnsPerTable))
-	plan.Name = types.StringValue(updateDatabase.Name)
-	plan.RetentionPeriod = types.Int64Value(updateDatabase.RetentionPeriod)
+		if renameDatabaseResponse.StatusCode() != 200 {
+			errMsg, err := formatErrorResponse(renameDatabaseResponse, renameDatabaseResponse.StatusCode())
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error formatting error response",
+					err.Error(),
+				)
+				return
+			}
+			resp.Diagnostics.AddError(
+				"Error renaming database",
+				errMsg,
+			)
+			return
+		}
+
+		plan.Name = types.StringValue(renameDatabaseResponse.JSON200.Name)
+
+		// Save state after rename so that if the update call below fails,
+		// Terraform still knows the database has been renamed.
+		if otherFieldsChanged {
+			state.Name = plan.Name
+			resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		}
+
+		tflog.Debug(ctx, "Rename Database API call succeeded")
+	}
+
+	// Only call update API if non-name fields changed
+	if otherFieldsChanged {
+		tflog.Debug(ctx, "Non-name fields changed, calling update database API", map[string]interface{}{})
+
+		maxTables := int32(plan.MaxTables.ValueInt64())
+		maxColumnsPerTable := int32(plan.MaxColumnsPerTable.ValueInt64())
+		updateDatabaseRequest := influxdb3.UpdateClusterDatabaseJSONRequestBody{
+			MaxTables:          &maxTables,
+			MaxColumnsPerTable: &maxColumnsPerTable,
+			RetentionPeriod:    plan.RetentionPeriod.ValueInt64Pointer(),
+		}
+
+		// Update existing database
+		updateDatabaseResponse, err := r.client.UpdateClusterDatabaseWithResponse(ctx, r.accountID, r.clusterID, plan.Name.ValueString(), updateDatabaseRequest)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error updating database",
+				"Could not update database, unexpected error: "+err.Error(),
+			)
+			return
+		}
+
+		if updateDatabaseResponse.StatusCode() != 200 {
+			errMsg, err := formatErrorResponse(updateDatabaseResponse, updateDatabaseResponse.StatusCode())
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Error formatting error response",
+					err.Error(),
+				)
+				return
+			}
+			resp.Diagnostics.AddError(
+				"Error updating database",
+				errMsg,
+			)
+			return
+		}
+		updateDatabase := updateDatabaseResponse.JSON200
+
+		// Map response body to schema and populate Computed attribute values
+		plan.AccountId = types.StringValue(updateDatabase.AccountId.String())
+		plan.ClusterId = types.StringValue(updateDatabase.ClusterId.String())
+		plan.MaxTables = types.Int64Value(int64(updateDatabase.MaxTables))
+		plan.MaxColumnsPerTable = types.Int64Value(int64(updateDatabase.MaxColumnsPerTable))
+		plan.Name = types.StringValue(updateDatabase.Name)
+		plan.RetentionPeriod = types.Int64Value(updateDatabase.RetentionPeriod)
+
+		tflog.Debug(ctx, "Update Database API call succeeded")
+	}
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	tflog.Debug(ctx, "Database update complete")
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
