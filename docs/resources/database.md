@@ -45,7 +45,7 @@ resource "influxdb3_database" "signals" {
 
 ### Required
 
-- `name` (String) The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters. **Note:** Database names can't be updated. An update will result in resource replacement. After a database is deleted, you cannot [reuse](https://docs.influxdata.com/influxdb/cloud-dedicated/admin/databases/delete/#cannot-reuse-database-names) the same name for a new database.
+- `name` (String) The name of the cluster database. The Length should be between `[ 1 .. 64 ]` characters. See the full naming restrictions [here](https://docs.influxdata.com/influxdb3/cloud-dedicated/admin/databases/create/#database-naming-restrictions). <br> **Note:** [Renaming](https://docs.influxdata.com/influxdb3/cloud-dedicated/admin/databases/rename/) a database does not change the database ID, modify data in the database, or update database tokens. After renaming a database, any existing database tokens will stop working and you must create new tokens with permissions for the renamed database. If you create a new database using the previous database name, tokens associated with that database name will grant access to the newly created database.
 
 ### Optional
 

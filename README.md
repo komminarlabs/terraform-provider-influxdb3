@@ -1,4 +1,5 @@
 # terraform-provider-influxdb3
+
 Terraform provider to manage InfluxDB V3
 
 ## Requirements
@@ -56,21 +57,21 @@ provider "influxdb3" {
 
 ## Supported InfluxDB flavours
 
-* [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
+- [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
 
 ## Available functionalities
 
 ### Data Sources
 
-* `influxdb3_database`
-* `influxdb3_databases`
-* `influxdb3_token`
-* `influxdb3_tokens`
+- `influxdb3_database`
+- `influxdb3_databases`
+- `influxdb3_token`
+- `influxdb3_tokens`
 
 ### Resources
 
-* `influxdb3_database`
-* `influxdb3_token`
+- `influxdb3_database`
+- `influxdb3_token`
 
 ## Developing the Provider
 
