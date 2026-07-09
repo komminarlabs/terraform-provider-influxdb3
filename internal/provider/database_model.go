@@ -132,6 +132,10 @@ func (v partitionTemplateValidator) ValidateList(ctx context.Context, req valida
 }
 
 func getDatabaseByName(databases influxdb3.GetClusterDatabasesResponse, name string) (*DatabaseModel, error) {
+	if databases.JSON200 == nil {
+		return nil, fmt.Errorf("the InfluxDB API returned a success status code without a valid JSON body")
+	}
+
 	for _, database := range *databases.JSON200 {
 		if database.Name == name {
 			partitionTemplate, err := getPartitionTemplate(database.PartitionTemplate)

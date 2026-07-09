@@ -168,6 +168,13 @@ func (r *TableResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 	createTable := createTableResponse.JSON200
+	if createTable == nil {
+		resp.Diagnostics.AddError(
+			"Error creating table",
+			formatEmptyResponse(createTableResponse, createTableResponse.StatusCode()),
+		)
+		return
+	}
 
 	// Map response body to schema and populate Computed attribute values
 	plan.AccountId = types.StringValue(createTable.AccountId.String())
@@ -231,6 +238,14 @@ func (r *TableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 			resp.Diagnostics.AddError(
 				"Error renaming table",
 				formatErrorResponse(renameTableResponse, renameTableResponse.StatusCode()),
+			)
+			return
+		}
+
+		if renameTableResponse.JSON200 == nil {
+			resp.Diagnostics.AddError(
+				"Error renaming table",
+				formatEmptyResponse(renameTableResponse, renameTableResponse.StatusCode()),
 			)
 			return
 		}

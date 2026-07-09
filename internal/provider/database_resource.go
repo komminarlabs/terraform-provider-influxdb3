@@ -168,6 +168,13 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 	createDatabase := createDatabaseResponse.JSON200
+	if createDatabase == nil {
+		resp.Diagnostics.AddError(
+			"Error creating database",
+			formatEmptyResponse(createDatabaseResponse, createDatabaseResponse.StatusCode()),
+		)
+		return
+	}
 
 	// Map response body to schema and populate Computed attribute values
 	plan.AccountId = types.StringValue(createDatabase.AccountId.String())
@@ -292,6 +299,14 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 
+		if renameDatabaseResponse.JSON200 == nil {
+			resp.Diagnostics.AddError(
+				"Error renaming database",
+				formatEmptyResponse(renameDatabaseResponse, renameDatabaseResponse.StatusCode()),
+			)
+			return
+		}
+
 		plan.Name = types.StringValue(renameDatabaseResponse.JSON200.Name)
 
 		// Save state after rename so that if the update call below fails,
@@ -337,6 +352,13 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 			return
 		}
 		updateDatabase := updateDatabaseResponse.JSON200
+		if updateDatabase == nil {
+			resp.Diagnostics.AddError(
+				"Error updating database",
+				formatEmptyResponse(updateDatabaseResponse, updateDatabaseResponse.StatusCode()),
+			)
+			return
+		}
 
 		// Map response body to schema and populate Computed attribute values
 		plan.AccountId = types.StringValue(updateDatabase.AccountId.String())

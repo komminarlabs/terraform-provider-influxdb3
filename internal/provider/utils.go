@@ -33,6 +33,14 @@ func formatErrorResponse(rsp any, statusCode int) string {
 	return fmt.Sprintf("HTTP Status Code: %d", statusCode)
 }
 
+// formatEmptyResponse describes a response with a success status code but no
+// parseable JSON body, which can happen when a proxy or load balancer
+// intercepts the request. Used to fail cleanly instead of dereferencing a nil
+// JSON200 field.
+func formatEmptyResponse(rsp any, statusCode int) string {
+	return "The InfluxDB API returned a success status code without a valid JSON body.\n" + formatErrorResponse(rsp, statusCode)
+}
+
 // newProviderData extracts the providerData set by the provider Configure
 // method. It returns false when the provider is not yet configured (nil data)
 // or, with an error diagnostic, when the data has an unexpected type.
