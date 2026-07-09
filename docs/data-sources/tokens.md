@@ -31,7 +31,7 @@ Read-Only:
 - `description` (String) The description of the database token.
 - `expires_at` (String) The date and time that the database token expires, if applicable. Uses RFC3339 format.
 - `id` (String) The ID of the database token.
-- `permissions` (Attributes List) The list of permissions the database token allows. (see [below for nested schema](#nestedatt--tokens--permissions))
+- `permissions` (Attributes Set) The set of permissions the database token allows. (see [below for nested schema](#nestedatt--tokens--permissions))
 
 <a id="nestedatt--tokens--permissions"></a>
 ### Nested Schema for `tokens.permissions`

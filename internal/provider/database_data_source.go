@@ -85,17 +85,8 @@ func (d *DatabaseDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 
 // Configure adds the provider configured client to the data source.
 func (d *DatabaseDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	pd, ok := req.ProviderData.(providerData)
+	pd, ok := newProviderData(req.ProviderData, &resp.Diagnostics)
 	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
 		return
 	}
 
@@ -132,17 +123,9 @@ func (d *DatabaseDataSource) Read(ctx context.Context, req datasource.ReadReques
 	}
 
 	if readDatabasesResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error getting database",
-			errMsg,
+			formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode()),
 		)
 		return
 	}

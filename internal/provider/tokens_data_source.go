@@ -2,9 +2,9 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -72,6 +72,7 @@ func (d *TokensDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 							Description: "The description of the database token.",
 						},
 						"expires_at": schema.StringAttribute{
+							CustomType:  timetypes.RFC3339Type{},
 							Computed:    true,
 							Description: "The date and time that the database token expires, if applicable. Uses RFC3339 format.",
 						},
@@ -79,9 +80,9 @@ func (d *TokensDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 							Computed:    true,
 							Description: "The ID of the database token.",
 						},
-						"permissions": schema.ListNestedAttribute{
+						"permissions": schema.SetNestedAttribute{
 							Computed:    true,
-							Description: "The list of permissions the database token allows.",
+							Description: "The set of permissions the database token allows.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"action": schema.StringAttribute{
@@ -104,17 +105,8 @@ func (d *TokensDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 
 // Configure adds the provider configured client to the data source.
 func (d *TokensDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	pd, ok := req.ProviderData.(providerData)
+	pd, ok := newProviderData(req.ProviderData, &resp.Diagnostics)
 	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
 		return
 	}
 
@@ -142,17 +134,9 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	}
 
 	if readTokensResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(readTokensResponse, readTokensResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error getting tokens",
-			errMsg,
+			formatErrorResponse(readTokensResponse, readTokensResponse.StatusCode()),
 		)
 		return
 	}
@@ -164,12 +148,9 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 			CreatedAt:   types.StringValue(token.CreatedAt.Format(time.RFC3339Nano)),
 			ClusterId:   types.StringValue(token.ClusterId.String()),
 			Description: types.StringValue(token.Description),
+			ExpiresAt:   timetypes.NewRFC3339TimePointerValue(token.ExpiresAt),
 			Id:          types.StringValue(token.Id.String()),
 			Permissions: getPermissions(token.Permissions),
-		}
-
-		if token.ExpiresAt != nil {
-			tokenState.ExpiresAt = types.StringValue(token.ExpiresAt.Format(time.RFC3339))
 		}
 
 		state.Tokens = append(state.Tokens, tokenState)

@@ -5,29 +5,49 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/thulasirajkomminar/influxdb3-management-go"
 )
 
 // formatErrorResponse formats the error response from the InfluxDB API.
-func formatErrorResponse(rsp any, statusCode int) (string, error) {
+// It looks for the generated JSON<status> error field on the response and
+// falls back to the raw response body for undocumented status codes.
+func formatErrorResponse(rsp any, statusCode int) string {
 	v := reflect.ValueOf(rsp)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
 
-	fieldName := "JSON" + strconv.Itoa(statusCode)
-	field := v.FieldByName(fieldName)
-	if !field.IsValid() {
-		return "", fmt.Errorf("field %s not found", fieldName)
+	if field := v.FieldByName("JSON" + strconv.Itoa(statusCode)); field.IsValid() {
+		if errorDetail, ok := field.Interface().(*influxdb3.Error); ok && errorDetail != nil {
+			return fmt.Sprintf("HTTP Status Code: %d\nError Code: %d\nError Message: %s\n", statusCode, errorDetail.Code, errorDetail.Message)
+		}
 	}
 
-	errorDetail, ok := field.Interface().(*influxdb3.Error)
+	if field := v.FieldByName("Body"); field.IsValid() {
+		if body, ok := field.Interface().([]byte); ok && len(body) > 0 {
+			return fmt.Sprintf("HTTP Status Code: %d\nResponse Body: %s", statusCode, body)
+		}
+	}
+
+	return fmt.Sprintf("HTTP Status Code: %d", statusCode)
+}
+
+// newProviderData extracts the providerData set by the provider Configure
+// method. It returns false when the provider is not yet configured (nil data)
+// or, with an error diagnostic, when the data has an unexpected type.
+func newProviderData(raw any, diags *diag.Diagnostics) (providerData, bool) {
+	if raw == nil {
+		return providerData{}, false
+	}
+
+	pd, ok := raw.(providerData)
 	if !ok {
-		return "", fmt.Errorf("field %s is not of type *influxdb3.Error %s", fieldName, field)
+		diags.AddError(
+			"Unexpected Provider Data Type",
+			fmt.Sprintf("Expected providerData, got: %T. Please report this issue to the provider developers.", raw),
+		)
+		return providerData{}, false
 	}
-
-	if errorDetail == nil {
-		return fmt.Sprintf("HTTP Status Code: %d", statusCode), nil
-	}
-	return fmt.Sprintf("HTTP Status Code: %d\nError Code: %d\nError Message: %s\n", statusCode, errorDetail.Code, errorDetail.Message), nil
+	return pd, true
 }

@@ -30,7 +30,7 @@ provider "influxdb3" {}
 
 ## Environment Variables
 
-Credentials can be provided by using the `INFLUXDB3_ACCOUNT_ID` and `INFLUXDB3_CLUSTER_ID` and `INFLUXDB3_TOKEN`.
+Credentials can be provided by using the `INFLUXDB3_ACCOUNT_ID`, `INFLUXDB3_CLUSTER_ID` and `INFLUXDB3_TOKEN` environment variables. The management API host can be overridden with `INFLUXDB3_HOST`.
 
 ### Example
 
@@ -49,6 +49,7 @@ terraform plan
 
 ### Optional
 
-- `account_id` (String, Sensitive) The ID of the account that the cluster belongs to
-- `cluster_id` (String, Sensitive) The ID of the cluster that you want to manage
-- `token` (String, Sensitive) The InfluxDB management token
+- `account_id` (String) The ID of the account that the cluster belongs to. Can also be set with the `INFLUXDB3_ACCOUNT_ID` environment variable.
+- `cluster_id` (String) The ID of the cluster that you want to manage. Can also be set with the `INFLUXDB3_CLUSTER_ID` environment variable.
+- `host` (String) The InfluxDB V3 management API host URL. The default is `https://console.influxdata.com`. Can also be set with the `INFLUXDB3_HOST` environment variable.
+- `token` (String, Sensitive) The InfluxDB management token. Can also be set with the `INFLUXDB3_TOKEN` environment variable.

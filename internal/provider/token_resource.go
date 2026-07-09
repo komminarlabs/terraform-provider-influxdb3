@@ -2,11 +2,10 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -21,7 +20,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var (
 	_ resource.Resource                = &TokenResource{}
-	_ resource.ResourceWithImportState = &TokenResource{}
+	_ resource.ResourceWithConfigure   = &TokenResource{}
 	_ resource.ResourceWithImportState = &TokenResource{}
 )
 
@@ -74,10 +73,11 @@ func (r *TokenResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Description: "The description of the database token.",
 			},
 			"expires_at": schema.StringAttribute{
+				CustomType:  timetypes.RFC3339Type{},
 				Optional:    true,
 				Description: "The date and time that the database token expires, if applicable. Uses RFC3339 format(for example: 2020-01-01T00:00:00Z).",
 				Validators: []validator.String{
-					rfc3339Validator{},
+					rfc3339NoSubsecondsValidator{},
 				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
@@ -90,12 +90,9 @@ func (r *TokenResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"permissions": schema.ListNestedAttribute{
+			"permissions": schema.SetNestedAttribute{
 				Required:    true,
-				Description: "The list of permissions the database token allows.",
-				Validators: []validator.List{
-					listvalidator.UniqueValues(),
-				},
+				Description: "The set of permissions the database token allows.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"action": schema.StringAttribute{
@@ -153,12 +150,9 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	if !plan.ExpiresAt.IsNull() && !plan.ExpiresAt.IsUnknown() {
-		t, err := time.Parse(time.RFC3339, plan.ExpiresAt.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error parsing expires_at",
-				err.Error(),
-			)
+		t, diags := plan.ExpiresAt.ValueRFC3339Time()
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
 			return
 		}
 		createTokenRequest.ExpiresAt = &t
@@ -174,17 +168,9 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	if createTokenResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(createTokenResponse, createTokenResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error creating token",
-			errMsg,
+			formatErrorResponse(createTokenResponse, createTokenResponse.StatusCode()),
 		)
 		return
 	}
@@ -198,10 +184,7 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	plan.Description = types.StringValue(createToken.Description)
 	plan.Id = types.StringValue(createToken.Id.String())
 	plan.Permissions = getPermissions(createToken.Permissions)
-
-	if createToken.ExpiresAt != nil {
-		plan.ExpiresAt = types.StringValue(createToken.ExpiresAt.Format(time.RFC3339))
-	}
+	plan.ExpiresAt = timetypes.NewRFC3339TimePointerValue(createToken.ExpiresAt)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -241,18 +224,17 @@ func (r *TokenResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
+	if readTokenResponse.StatusCode() == 404 {
+		// The token no longer exists; remove it from state so
+		// Terraform can plan to recreate it.
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	if readTokenResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(readTokenResponse, readTokenResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error getting token",
-			errMsg,
+			formatErrorResponse(readTokenResponse, readTokenResponse.StatusCode()),
 		)
 		return
 	}
@@ -265,10 +247,7 @@ func (r *TokenResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	state.Description = types.StringValue(readToken.Description)
 	state.Id = types.StringValue(readToken.Id.String())
 	state.Permissions = getPermissions(readToken.Permissions)
-
-	if readToken.ExpiresAt != nil {
-		state.ExpiresAt = types.StringValue(readToken.ExpiresAt.Format(time.RFC3339))
-	}
+	state.ExpiresAt = timetypes.NewRFC3339TimePointerValue(readToken.ExpiresAt)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -334,17 +313,9 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	if updateTokenResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(updateTokenResponse, updateTokenResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error updating token",
-			errMsg,
+			formatErrorResponse(updateTokenResponse, updateTokenResponse.StatusCode()),
 		)
 		return
 	}
@@ -357,10 +328,7 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	plan.Description = types.StringValue(updateToken.Description)
 	plan.Id = types.StringValue(updateToken.Id.String())
 	plan.Permissions = getPermissions(updateToken.Permissions)
-
-	if updateToken.ExpiresAt != nil {
-		plan.ExpiresAt = types.StringValue(updateToken.ExpiresAt.Format(time.RFC3339))
-	}
+	plan.ExpiresAt = timetypes.NewRFC3339TimePointerValue(updateToken.ExpiresAt)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -400,17 +368,9 @@ func (r *TokenResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	if deleteTokenResponse.StatusCode() != 204 {
-		errMsg, err := formatErrorResponse(deleteTokenResponse, deleteTokenResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error deleting token",
-			errMsg,
+			formatErrorResponse(deleteTokenResponse, deleteTokenResponse.StatusCode()),
 		)
 		return
 	}
@@ -418,17 +378,8 @@ func (r *TokenResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 
 // Configure adds the provider configured client to the resource.
 func (r *TokenResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	pd, ok := req.ProviderData.(providerData)
+	pd, ok := newProviderData(req.ProviderData, &resp.Diagnostics)
 	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
 		return
 	}
 
