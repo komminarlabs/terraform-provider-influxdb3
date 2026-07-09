@@ -247,9 +247,13 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 	retryClient.RetryWaitMax = 5 * time.Second
 	retryClient.RetryMax = 3
 
+	// Log every request/response (per retry attempt) when Terraform debug
+	// logging is enabled, with credentials masked. The transport also adds
+	// the Authorization header.
+	retryClient.HTTPClient.Transport = newLoggingHTTPTransport(token, retryClient.HTTPClient.Transport)
+
 	client, err := influxdb3.NewClientWithResponses(url, influxdb3.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
 		req.Header.Set("Accept", "application/json")
-		req.Header.Set("Authorization", "Bearer "+token)
 		return nil
 	}), influxdb3.WithHTTPClient(retryClient.StandardClient()))
 	if err != nil {

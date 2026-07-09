@@ -34,4 +34,8 @@ provider "influxdb3" {}
 terraform plan
 ```
 
+## Debugging
+
+With [Terraform debug logging](https://developer.hashicorp.com/terraform/internals/debugging) enabled (e.g. `TF_LOG=DEBUG`), the provider logs every HTTP request and response sent to the management API, including headers and bodies. Sensitive values (the management token and generated access tokens) are masked in the logs.
+
 {{ .SchemaMarkdown | trimspace }}
