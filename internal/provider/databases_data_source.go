@@ -128,6 +128,14 @@ func (d *DatabasesDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
+	if readDatabasesResponse.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Error getting databases",
+			formatEmptyResponse(readDatabasesResponse, readDatabasesResponse.StatusCode()),
+		)
+		return
+	}
+
 	// Map response body to model
 	for _, database := range *readDatabasesResponse.JSON200 {
 		partitionTemplate, err := getPartitionTemplate(database.PartitionTemplate)

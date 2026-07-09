@@ -141,6 +141,14 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
+	if readTokensResponse.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Error getting tokens",
+			formatEmptyResponse(readTokensResponse, readTokensResponse.StatusCode()),
+		)
+		return
+	}
+
 	// Map response body to model
 	for _, token := range *readTokensResponse.JSON200 {
 		tokenState := TokenModel{

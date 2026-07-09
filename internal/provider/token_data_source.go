@@ -139,6 +139,13 @@ func (d *TokenDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		)
 		return
 	}
+	if readTokenResponse.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Error getting token",
+			formatEmptyResponse(readTokenResponse, readTokenResponse.StatusCode()),
+		)
+		return
+	}
 	readToken := *readTokenResponse.JSON200
 
 	// Overwrite items with refreshed state

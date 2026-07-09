@@ -174,6 +174,13 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 		)
 		return
 	}
+	if createTokenResponse.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Error creating token",
+			formatEmptyResponse(createTokenResponse, createTokenResponse.StatusCode()),
+		)
+		return
+	}
 	createToken := *createTokenResponse.JSON200
 
 	// Map response body to schema and populate Computed attribute values
@@ -235,6 +242,13 @@ func (r *TokenResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		resp.Diagnostics.AddError(
 			"Error getting token",
 			formatErrorResponse(readTokenResponse, readTokenResponse.StatusCode()),
+		)
+		return
+	}
+	if readTokenResponse.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Error getting token",
+			formatEmptyResponse(readTokenResponse, readTokenResponse.StatusCode()),
 		)
 		return
 	}
@@ -316,6 +330,13 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		resp.Diagnostics.AddError(
 			"Error updating token",
 			formatErrorResponse(updateTokenResponse, updateTokenResponse.StatusCode()),
+		)
+		return
+	}
+	if updateTokenResponse.JSON200 == nil {
+		resp.Diagnostics.AddError(
+			"Error updating token",
+			formatEmptyResponse(updateTokenResponse, updateTokenResponse.StatusCode()),
 		)
 		return
 	}
