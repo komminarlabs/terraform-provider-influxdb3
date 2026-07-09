@@ -1,9 +1,12 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/thulasirajkomminar/influxdb3-management-go"
 )
@@ -31,6 +34,101 @@ func (d DatabasePartitionTemplateModel) GetAttrType() attr.Type {
 		"type":  types.StringType,
 		"value": types.StringType,
 	}}
+}
+
+// bucketPartitionValue is the JSON payload expected in the value of a
+// bucket partition template part.
+type bucketPartitionValue struct {
+	NumberOfBuckets *int32  `json:"numberOfBuckets,omitempty"`
+	TagName         *string `json:"tagName,omitempty"`
+}
+
+// buildPartitionTemplate converts partition template parts from the Terraform
+// model into the API request representation.
+func buildPartitionTemplate(parts []DatabasePartitionTemplateModel) ([]influxdb3.ClusterDatabasePartitionTemplatePart, error) {
+	partitionTemplates := []influxdb3.ClusterDatabasePartitionTemplatePart{}
+	for _, pt := range parts {
+		t := influxdb3.ClusterDatabasePartitionTemplatePart{}
+		switch pt.Type.ValueString() {
+		case "time":
+			timeTemplate := influxdb3.ClusterDatabasePartitionTemplatePartTimeFormat{
+				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTimeFormatType)(pt.Type.ValueStringPointer()),
+				Value: pt.Value.ValueStringPointer(),
+			}
+
+			if err := t.MergeClusterDatabasePartitionTemplatePartTimeFormat(timeTemplate); err != nil {
+				return nil, fmt.Errorf("failed to merge time template: %w", err)
+			}
+		case "tag":
+			tagTemplate := influxdb3.ClusterDatabasePartitionTemplatePartTagValue{
+				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTagValueType)(pt.Type.ValueStringPointer()),
+				Value: pt.Value.ValueStringPointer(),
+			}
+
+			if err := t.MergeClusterDatabasePartitionTemplatePartTagValue(tagTemplate); err != nil {
+				return nil, fmt.Errorf("failed to merge tag template: %w", err)
+			}
+		case "bucket":
+			var encodedJSONData struct {
+				NumberOfBuckets *int32  `json:"numberOfBuckets,omitempty"`
+				TagName         *string `json:"tagName,omitempty"`
+			}
+			if err := json.Unmarshal([]byte(pt.Value.ValueString()), &encodedJSONData); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal JSON data: %w", err)
+			}
+
+			bucketTemplate := influxdb3.ClusterDatabasePartitionTemplatePartBucket{
+				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartBucketType)(pt.Type.ValueStringPointer()),
+				Value: &encodedJSONData,
+			}
+
+			if err := t.MergeClusterDatabasePartitionTemplatePartBucket(bucketTemplate); err != nil {
+				return nil, fmt.Errorf("failed to merge bucket template: %w", err)
+			}
+		}
+		partitionTemplates = append(partitionTemplates, t)
+	}
+	return partitionTemplates, nil
+}
+
+// partitionTemplateValidator validates bucket partition template parts at
+// plan time: the value must be a JSON object such as
+// {"numberOfBuckets": 10, "tagName": "tag"}.
+type partitionTemplateValidator struct{}
+
+func (v partitionTemplateValidator) Description(ctx context.Context) string {
+	return "bucket partition template parts must have a JSON encoded value"
+}
+
+func (v partitionTemplateValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v partitionTemplateValidator) ValidateList(ctx context.Context, req validator.ListRequest, resp *validator.ListResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+
+	var parts []DatabasePartitionTemplateModel
+	resp.Diagnostics.Append(req.ConfigValue.ElementsAs(ctx, &parts, false)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	for i, pt := range parts {
+		if pt.Type.ValueString() != "bucket" || pt.Value.IsNull() || pt.Value.IsUnknown() {
+			continue
+		}
+
+		var bucketValue bucketPartitionValue
+		if err := json.Unmarshal([]byte(pt.Value.ValueString()), &bucketValue); err != nil {
+			resp.Diagnostics.AddAttributeError(
+				req.Path.AtListIndex(i).AtName("value"),
+				"Invalid Bucket Partition Template Value",
+				fmt.Sprintf("The value of a bucket partition template part must be a JSON object with numberOfBuckets and tagName keys, for example {\"numberOfBuckets\": 10, \"tagName\": \"tag\"}. Error: %s", err.Error()),
+			)
+		}
+	}
 }
 
 func getDatabaseByName(databases influxdb3.GetClusterDatabasesResponse, name string) (*DatabaseModel, error) {

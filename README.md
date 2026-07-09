@@ -5,7 +5,7 @@ Terraform provider to manage InfluxDB V3
 ## Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0
-- [Go](https://golang.org/doc/install) >= 1.20
+- [Go](https://golang.org/doc/install) >= 1.26
 
 ## Building The Provider
 
@@ -55,6 +55,8 @@ provider "influxdb3" {
 }
 ```
 
+All provider configuration values can also be set with environment variables: `INFLUXDB3_ACCOUNT_ID`, `INFLUXDB3_CLUSTER_ID`, `INFLUXDB3_TOKEN` and `INFLUXDB3_HOST` (to override the management API host, which defaults to `https://console.influxdata.com`).
+
 ## Supported InfluxDB flavours
 
 - [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
@@ -71,6 +73,7 @@ provider "influxdb3" {
 ### Resources
 
 - `influxdb3_database`
+- `influxdb3_table`
 - `influxdb3_token`
 
 ## Developing the Provider

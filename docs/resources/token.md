@@ -18,7 +18,7 @@ Creates and manages a token and returns the generated database token. Use this r
 ### Required
 
 - `description` (String) The description of the database token.
-- `permissions` (Attributes List) The list of permissions the database token allows. (see [below for nested schema](#nestedatt--permissions))
+- `permissions` (Attributes Set) The set of permissions the database token allows. (see [below for nested schema](#nestedatt--permissions))
 
 ### Optional
 

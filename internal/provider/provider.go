@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,6 +41,7 @@ type InfluxDBProvider struct {
 type InfluxDBProviderModel struct {
 	AccountID types.String `tfsdk:"account_id"`
 	ClusterID types.String `tfsdk:"cluster_id"`
+	Host      types.String `tfsdk:"host"`
 	Token     types.String `tfsdk:"token"`
 }
 
@@ -62,17 +64,19 @@ func (p *InfluxDBProvider) Schema(ctx context.Context, req provider.SchemaReques
 
 		Attributes: map[string]schema.Attribute{
 			"account_id": schema.StringAttribute{
-				Description: "The ID of the account that the cluster belongs to",
+				Description: "The ID of the account that the cluster belongs to. Can also be set with the `INFLUXDB3_ACCOUNT_ID` environment variable.",
 				Optional:    true,
-				Sensitive:   true,
 			},
 			"cluster_id": schema.StringAttribute{
-				Description: "The ID of the cluster that you want to manage",
+				Description: "The ID of the cluster that you want to manage. Can also be set with the `INFLUXDB3_CLUSTER_ID` environment variable.",
 				Optional:    true,
-				Sensitive:   true,
+			},
+			"host": schema.StringAttribute{
+				Description: "The InfluxDB V3 management API host URL. The default is `" + INFLUXDB3_HOST + "`. Can also be set with the `INFLUXDB3_HOST` environment variable.",
+				Optional:    true,
 			},
 			"token": schema.StringAttribute{
-				Description: "The InfluxDB management token",
+				Description: "The InfluxDB management token. Can also be set with the `INFLUXDB3_TOKEN` environment variable.",
 				Optional:    true,
 				Sensitive:   true,
 			},
@@ -111,6 +115,15 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 		)
 	}
 
+	if config.Host.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("host"),
+			"Unknown InfluxDB V3 Host",
+			"The provider cannot create the InfluxDB client as there is an unknown configuration value for the InfluxDB V3 Host. "+
+				"Either target apply the source of the value first, set the value statically in the configuration, or use the INFLUXDB3_HOST environment variable.",
+		)
+	}
+
 	if config.Token.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("token"),
@@ -129,6 +142,7 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 
 	accountID := os.Getenv("INFLUXDB3_ACCOUNT_ID")
 	clusterID := os.Getenv("INFLUXDB3_CLUSTER_ID")
+	host := os.Getenv("INFLUXDB3_HOST")
 	token := os.Getenv("INFLUXDB3_TOKEN")
 
 	if !config.AccountID.IsNull() {
@@ -139,19 +153,27 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 		clusterID = config.ClusterID.ValueString()
 	}
 
+	if !config.Host.IsNull() {
+		host = config.Host.ValueString()
+	}
+
 	if !config.Token.IsNull() {
 		token = config.Token.ValueString()
 	}
 
+	if host == "" {
+		host = INFLUXDB3_HOST
+	}
+
 	// Combine host and endpoint
-	url := INFLUXDB3_HOST + INFLUXDB3_API_ENDPOINT
+	url := strings.TrimSuffix(host, "/") + INFLUXDB3_API_ENDPOINT
 
 	// If any of the expected configurations are missing, return
 	// errors with provider-specific guidance.
 
 	if accountID == "" {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("accountID"),
+			path.Root("account_id"),
 			"Missing InfluxDB V3 Account ID",
 			"The provider cannot create the InfluxDB client as there is a missing or empty value for the InfluxDB V3 Account ID. "+
 				"Set the Account ID value in the configuration or use the INFLUXDB3_ACCOUNT_ID environment variable. "+
@@ -161,7 +183,7 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 
 	if clusterID == "" {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("clusterID"),
+			path.Root("cluster_id"),
 			"Missing InfluxDB V3 Cluster ID",
 			"The provider cannot create the InfluxDB client as there is a missing or empty value for the InfluxDB V3 Cluster ID. "+
 				"Set the Cluster ID value in the configuration or use the INFLUXDB3_CLUSTER_ID environment variable. "+
@@ -188,9 +210,10 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 
 	accountUUID, err := uuid.Parse(accountID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Missing InfluxDB V3 Account ID",
-			"The provider cannot create the InfluxDB client as there is a incorrect value for the InfluxDB V3 Account ID. "+
+		resp.Diagnostics.AddAttributeError(
+			path.Root("account_id"),
+			"Invalid InfluxDB V3 Account ID",
+			"The provider cannot create the InfluxDB client as there is an incorrect value for the InfluxDB V3 Account ID. "+
 				"Set the Account ID value in the configuration or use the INFLUXDB3_ACCOUNT_ID environment variable. "+
 				"If either is already set, ensure the value is in UUID format.",
 		)
@@ -199,24 +222,19 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 
 	clusterUUID, err := uuid.Parse(clusterID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Missing InfluxDB V3 Cluster ID",
-			"The provider cannot create the InfluxDB client as there is a incorrect value for the InfluxDB V3 Cluster ID. "+
+		resp.Diagnostics.AddAttributeError(
+			path.Root("cluster_id"),
+			"Invalid InfluxDB V3 Cluster ID",
+			"The provider cannot create the InfluxDB client as there is an incorrect value for the InfluxDB V3 Cluster ID. "+
 				"Set the Cluster ID value in the configuration or use the INFLUXDB3_CLUSTER_ID environment variable. "+
 				"If either is already set, ensure the value is in UUID format.",
 		)
 		return
 	}
 
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	ctx = tflog.SetField(ctx, "INFLUXDB3_ACCOUNT_ID", accountID)
 	ctx = tflog.SetField(ctx, "INFLUXDB3_CLUSTER_ID", clusterID)
-	ctx = tflog.SetField(ctx, "INFLUXDB3_TOKEN", token)
 	ctx = tflog.SetField(ctx, "INFLUXDB3_URL", url)
-	ctx = tflog.MaskFieldValuesWithFieldKeys(ctx, "INFLUXDB3_TOKEN")
 
 	tflog.Debug(ctx, "Creating InfluxDB V3 client")
 
@@ -262,6 +280,7 @@ func (p *InfluxDBProvider) Resources(ctx context.Context) []func() resource.Reso
 	return []func() resource.Resource{
 		NewTokenResource,
 		NewDatabaseResource,
+		NewTableResource,
 	}
 }
 

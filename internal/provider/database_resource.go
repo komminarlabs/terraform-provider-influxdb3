@@ -2,8 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -24,7 +22,7 @@ import (
 // Ensure provider defined types fully satisfy framework interfaces.
 var (
 	_ resource.Resource                = &DatabaseResource{}
-	_ resource.ResourceWithImportState = &DatabaseResource{}
+	_ resource.ResourceWithConfigure   = &DatabaseResource{}
 	_ resource.ResourceWithImportState = &DatabaseResource{}
 )
 
@@ -97,6 +95,7 @@ func (r *DatabaseResource) Schema(ctx context.Context, req resource.SchemaReques
 				Validators: []validator.List{
 					listvalidator.UniqueValues(),
 					listvalidator.SizeBetween(1, 8),
+					partitionTemplateValidator{},
 				},
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.UseStateForUnknown(),
@@ -133,66 +132,13 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	// Generate API request body from plan
-	partitionTemplates := []influxdb3.ClusterDatabasePartitionTemplatePart{}
-	for _, pt := range plan.PartitionTemplate {
-		t := influxdb3.ClusterDatabasePartitionTemplatePart{}
-		if pt.Type.ValueString() == "time" {
-			timeTemplate := influxdb3.ClusterDatabasePartitionTemplatePartTimeFormat{
-				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTimeFormatType)(pt.Type.ValueStringPointer()),
-				Value: pt.Value.ValueStringPointer(),
-			}
-
-			err := t.MergeClusterDatabasePartitionTemplatePartTimeFormat(timeTemplate)
-			if err != nil {
-				resp.Diagnostics.AddError(
-					"Error creating database partition template",
-					"Failed to merge time template: "+err.Error(),
-				)
-				return
-			}
-		} else if pt.Type.ValueString() == "tag" {
-			tagTemplate := influxdb3.ClusterDatabasePartitionTemplatePartTagValue{
-				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTagValueType)(pt.Type.ValueStringPointer()),
-				Value: pt.Value.ValueStringPointer(),
-			}
-
-			err := t.MergeClusterDatabasePartitionTemplatePartTagValue(tagTemplate)
-			if err != nil {
-				resp.Diagnostics.AddError(
-					"Error creating database partition template",
-					"Failed to merge tag template: "+err.Error(),
-				)
-				return
-			}
-		} else if pt.Type.ValueString() == "bucket" {
-			var encodedJSONData struct {
-				NumberOfBuckets *int32  `json:"numberOfBuckets,omitempty"`
-				TagName         *string `json:"tagName,omitempty"`
-			}
-
-			err := json.Unmarshal([]byte(pt.Value.ValueString()), &encodedJSONData)
-			if err != nil {
-				resp.Diagnostics.AddError(
-					"Error creating database partition template",
-					"Failed to unmarshal JSON data: "+err.Error(),
-				)
-				return
-			}
-			bucketTemplate := influxdb3.ClusterDatabasePartitionTemplatePartBucket{
-				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartBucketType)(pt.Type.ValueStringPointer()),
-				Value: &encodedJSONData,
-			}
-
-			err = t.MergeClusterDatabasePartitionTemplatePartBucket(bucketTemplate)
-			if err != nil {
-				resp.Diagnostics.AddError(
-					"Error creating database partition template",
-					"Failed to merge bucket template: "+err.Error(),
-				)
-				return
-			}
-		}
-		partitionTemplates = append(partitionTemplates, t)
+	partitionTemplates, err := buildPartitionTemplate(plan.PartitionTemplate)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error creating database partition template",
+			err.Error(),
+		)
+		return
 	}
 
 	maxTables := int32(plan.MaxTables.ValueInt64())
@@ -215,17 +161,9 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	if createDatabaseResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(createDatabaseResponse, createDatabaseResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error creating database",
-			errMsg,
+			formatErrorResponse(createDatabaseResponse, createDatabaseResponse.StatusCode()),
 		)
 		return
 	}
@@ -278,17 +216,9 @@ func (r *DatabaseResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	if readDatabasesResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error getting database",
-			errMsg,
+			formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode()),
 		)
 		return
 	}
@@ -303,10 +233,10 @@ func (r *DatabaseResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 	if readDatabase == nil {
-		resp.Diagnostics.AddError(
-			"Database not found",
-			fmt.Sprintf("Database with name %s not found", state.Name.ValueString()),
-		)
+		// The database no longer exists; remove it from state so
+		// Terraform can plan to recreate it.
+		tflog.Warn(ctx, "Database not found, removing from state", map[string]any{"name": state.Name.ValueString()})
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -355,17 +285,9 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 
 		if renameDatabaseResponse.StatusCode() != 200 {
-			errMsg, err := formatErrorResponse(renameDatabaseResponse, renameDatabaseResponse.StatusCode())
-			if err != nil {
-				resp.Diagnostics.AddError(
-					"Error formatting error response",
-					err.Error(),
-				)
-				return
-			}
 			resp.Diagnostics.AddError(
 				"Error renaming database",
-				errMsg,
+				formatErrorResponse(renameDatabaseResponse, renameDatabaseResponse.StatusCode()),
 			)
 			return
 		}
@@ -408,17 +330,9 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 		}
 
 		if updateDatabaseResponse.StatusCode() != 200 {
-			errMsg, err := formatErrorResponse(updateDatabaseResponse, updateDatabaseResponse.StatusCode())
-			if err != nil {
-				resp.Diagnostics.AddError(
-					"Error formatting error response",
-					err.Error(),
-				)
-				return
-			}
 			resp.Diagnostics.AddError(
 				"Error updating database",
-				errMsg,
+				formatErrorResponse(updateDatabaseResponse, updateDatabaseResponse.StatusCode()),
 			)
 			return
 		}
@@ -465,17 +379,9 @@ func (r *DatabaseResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 
 	if deleteDatabasesResponse.StatusCode() != 204 {
-		errMsg, err := formatErrorResponse(deleteDatabasesResponse, deleteDatabasesResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error deleting database",
-			errMsg,
+			formatErrorResponse(deleteDatabasesResponse, deleteDatabasesResponse.StatusCode()),
 		)
 		return
 	}
@@ -483,17 +389,8 @@ func (r *DatabaseResource) Delete(ctx context.Context, req resource.DeleteReques
 
 // Configure adds the provider configured client to the resource.
 func (r *DatabaseResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	pd, ok := req.ProviderData.(providerData)
+	pd, ok := newProviderData(req.ProviderData, &resp.Diagnostics)
 	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
 		return
 	}
 

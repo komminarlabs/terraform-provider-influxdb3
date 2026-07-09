@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -98,17 +97,8 @@ func (d *DatabasesDataSource) Schema(ctx context.Context, req datasource.SchemaR
 
 // Configure adds the provider configured client to the data source.
 func (d *DatabasesDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	// Prevent panic if the provider has not been configured.
-	if req.ProviderData == nil {
-		return
-	}
-
-	pd, ok := req.ProviderData.(providerData)
+	pd, ok := newProviderData(req.ProviderData, &resp.Diagnostics)
 	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected influxdb3.ClientWithResponses, got: %T. Please report this issue to the provider developers.", req.ProviderData),
-		)
 		return
 	}
 
@@ -131,17 +121,9 @@ func (d *DatabasesDataSource) Read(ctx context.Context, req datasource.ReadReque
 	}
 
 	if readDatabasesResponse.StatusCode() != 200 {
-		errMsg, err := formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error formatting error response",
-				err.Error(),
-			)
-			return
-		}
 		resp.Diagnostics.AddError(
 			"Error getting databases",
-			errMsg,
+			formatErrorResponse(readDatabasesResponse, readDatabasesResponse.StatusCode()),
 		)
 		return
 	}
