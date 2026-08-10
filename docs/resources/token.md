@@ -31,6 +31,7 @@ Creates and manages a token and returns the generated database token. Use this r
 - `cluster_id` (String) The ID of the cluster that the database token belongs to.
 - `created_at` (String) The date and time that the database token was created. Uses RFC3339 format.
 - `id` (String) The ID of the database token.
+- `revoked_at` (String) The date and time that the database token was revoked, if applicable. Uses RFC3339 format.
 
 <a id="nestedatt--permissions"></a>
 ### Nested Schema for `permissions`

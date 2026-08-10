@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -24,9 +24,9 @@ func NewTokensDataSource() datasource.DataSource {
 
 // TokensDataSource is the data source implementation.
 type TokensDataSource struct {
-	accountID influxdb3.UuidV4
-	client    influxdb3.ClientWithResponses
-	clusterID influxdb3.UuidV4
+	accountID influxdb3cloud.UuidV4
+	client    influxdb3cloud.ClientWithResponses
+	clusterID influxdb3cloud.UuidV4
 }
 
 // TokensDataSourceModel describes the data source data model.
@@ -96,6 +96,11 @@ func (d *TokensDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 								},
 							},
 						},
+						"revoked_at": schema.StringAttribute{
+							CustomType:  timetypes.RFC3339Type{},
+							Computed:    true,
+							Description: "The date and time that the database token was revoked, if applicable. Uses RFC3339 format.",
+						},
 					},
 				},
 			},
@@ -159,6 +164,7 @@ func (d *TokensDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 			ExpiresAt:   timetypes.NewRFC3339TimePointerValue(token.ExpiresAt),
 			Id:          types.StringValue(token.Id.String()),
 			Permissions: getPermissions(token.Permissions),
+			RevokedAt:   timetypes.NewRFC3339TimePointerValue(token.RevokedAt),
 		}
 
 		state.Tokens = append(state.Tokens, tokenState)

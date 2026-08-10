@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // DatabaseModel maps InfluxDB database schema data.
@@ -45,14 +45,14 @@ type bucketPartitionValue struct {
 
 // buildPartitionTemplate converts partition template parts from the Terraform
 // model into the API request representation.
-func buildPartitionTemplate(parts []DatabasePartitionTemplateModel) ([]influxdb3.ClusterDatabasePartitionTemplatePart, error) {
-	partitionTemplates := []influxdb3.ClusterDatabasePartitionTemplatePart{}
+func buildPartitionTemplate(parts []DatabasePartitionTemplateModel) ([]influxdb3cloud.ClusterDatabasePartitionTemplatePart, error) {
+	partitionTemplates := []influxdb3cloud.ClusterDatabasePartitionTemplatePart{}
 	for _, pt := range parts {
-		t := influxdb3.ClusterDatabasePartitionTemplatePart{}
+		t := influxdb3cloud.ClusterDatabasePartitionTemplatePart{}
 		switch pt.Type.ValueString() {
 		case "time":
-			timeTemplate := influxdb3.ClusterDatabasePartitionTemplatePartTimeFormat{
-				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTimeFormatType)(pt.Type.ValueStringPointer()),
+			timeTemplate := influxdb3cloud.ClusterDatabasePartitionTemplatePartTimeFormat{
+				Type:  (*influxdb3cloud.ClusterDatabasePartitionTemplatePartTimeFormatType)(pt.Type.ValueStringPointer()),
 				Value: pt.Value.ValueStringPointer(),
 			}
 
@@ -60,8 +60,8 @@ func buildPartitionTemplate(parts []DatabasePartitionTemplateModel) ([]influxdb3
 				return nil, fmt.Errorf("failed to merge time template: %w", err)
 			}
 		case "tag":
-			tagTemplate := influxdb3.ClusterDatabasePartitionTemplatePartTagValue{
-				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartTagValueType)(pt.Type.ValueStringPointer()),
+			tagTemplate := influxdb3cloud.ClusterDatabasePartitionTemplatePartTagValue{
+				Type:  (*influxdb3cloud.ClusterDatabasePartitionTemplatePartTagValueType)(pt.Type.ValueStringPointer()),
 				Value: pt.Value.ValueStringPointer(),
 			}
 
@@ -77,8 +77,8 @@ func buildPartitionTemplate(parts []DatabasePartitionTemplateModel) ([]influxdb3
 				return nil, fmt.Errorf("failed to unmarshal JSON data: %w", err)
 			}
 
-			bucketTemplate := influxdb3.ClusterDatabasePartitionTemplatePartBucket{
-				Type:  (*influxdb3.ClusterDatabasePartitionTemplatePartBucketType)(pt.Type.ValueStringPointer()),
+			bucketTemplate := influxdb3cloud.ClusterDatabasePartitionTemplatePartBucket{
+				Type:  (*influxdb3cloud.ClusterDatabasePartitionTemplatePartBucketType)(pt.Type.ValueStringPointer()),
 				Value: &encodedJSONData,
 			}
 
@@ -131,7 +131,7 @@ func (v partitionTemplateValidator) ValidateList(ctx context.Context, req valida
 	}
 }
 
-func getDatabaseByName(databases influxdb3.GetClusterDatabasesResponse, name string) (*DatabaseModel, error) {
+func getDatabaseByName(databases influxdb3cloud.GetClusterDatabasesResponse, name string) (*DatabaseModel, error) {
 	if databases.JSON200 == nil {
 		return nil, fmt.Errorf("the InfluxDB API returned a success status code without a valid JSON body")
 	}
@@ -158,7 +158,7 @@ func getDatabaseByName(databases influxdb3.GetClusterDatabasesResponse, name str
 	return nil, nil
 }
 
-func getPartitionTemplate(partitionTemplates *influxdb3.ClusterDatabasePartitionTemplate) ([]DatabasePartitionTemplateModel, error) {
+func getPartitionTemplate(partitionTemplates *influxdb3cloud.ClusterDatabasePartitionTemplate) ([]DatabasePartitionTemplateModel, error) {
 	if partitionTemplates == nil {
 		return nil, nil
 	}

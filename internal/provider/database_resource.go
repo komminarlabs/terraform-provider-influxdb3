@@ -16,7 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -33,9 +33,9 @@ func NewDatabaseResource() resource.Resource {
 
 // DatabaseResource defines the resource implementation.
 type DatabaseResource struct {
-	accountID influxdb3.UuidV4
-	client    influxdb3.ClientWithResponses
-	clusterID influxdb3.UuidV4
+	accountID influxdb3cloud.UuidV4
+	client    influxdb3cloud.ClientWithResponses
+	clusterID influxdb3cloud.UuidV4
 }
 
 // Metadata returns the resource type name.
@@ -143,7 +143,7 @@ func (r *DatabaseResource) Create(ctx context.Context, req resource.CreateReques
 
 	maxTables := int32(plan.MaxTables.ValueInt64())
 	maxColumnsPerTable := int32(plan.MaxColumnsPerTable.ValueInt64())
-	createDatabaseRequest := influxdb3.CreateClusterDatabaseJSONRequestBody{
+	createDatabaseRequest := influxdb3cloud.CreateClusterDatabaseJSONRequestBody{
 		MaxTables:          &maxTables,
 		MaxColumnsPerTable: &maxColumnsPerTable,
 		Name:               plan.Name.ValueString(),
@@ -278,7 +278,7 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 	if nameChanged {
 		tflog.Debug(ctx, "Name change detected, calling rename database API")
 
-		renameDatabaseRequest := influxdb3.RenameClusterDatabaseJSONRequestBody{
+		renameDatabaseRequest := influxdb3cloud.RenameClusterDatabaseJSONRequestBody{
 			Name: plan.Name.ValueString(),
 		}
 
@@ -328,7 +328,7 @@ func (r *DatabaseResource) Update(ctx context.Context, req resource.UpdateReques
 
 		maxTables := int32(plan.MaxTables.ValueInt64())
 		maxColumnsPerTable := int32(plan.MaxColumnsPerTable.ValueInt64())
-		updateDatabaseRequest := influxdb3.UpdateClusterDatabaseJSONRequestBody{
+		updateDatabaseRequest := influxdb3cloud.UpdateClusterDatabaseJSONRequestBody{
 			MaxTables:          &maxTables,
 			MaxColumnsPerTable: &maxColumnsPerTable,
 			RetentionPeriod:    plan.RetentionPeriod.ValueInt64Pointer(),

@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -31,9 +31,9 @@ func NewTokenResource() resource.Resource {
 
 // TokenResource defines the resource implementation.
 type TokenResource struct {
-	accountID influxdb3.UuidV4
-	client    influxdb3.ClientWithResponses
-	clusterID influxdb3.UuidV4
+	accountID influxdb3cloud.UuidV4
+	client    influxdb3cloud.ClientWithResponses
+	clusterID influxdb3cloud.UuidV4
 }
 
 // Metadata returns the resource type name.
@@ -109,6 +109,11 @@ func (r *TokenResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 					},
 				},
 			},
+			"revoked_at": schema.StringAttribute{
+				CustomType:  timetypes.RFC3339Type{},
+				Computed:    true,
+				Description: "The date and time that the database token was revoked, if applicable. Uses RFC3339 format.",
+			},
 		},
 	}
 }
@@ -124,27 +129,16 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	// Generate API request body from plan
-	var permissionsRequest []influxdb3.DatabaseTokenPermission
-	for _, permission := range plan.Permissions {
-		resource := influxdb3.DatabaseTokenPermissionResource{}
-
-		err := resource.FromClusterDatabaseName(permission.Resource.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Validation error. Ensure the Resource is in the correct format.",
-				err.Error(),
-			)
-			return
-		}
-
-		permission := influxdb3.DatabaseTokenPermission{
-			Action:   permission.Action.ValueStringPointer(),
-			Resource: &resource,
-		}
-		permissionsRequest = append(permissionsRequest, permission)
+	permissionsRequest, err := buildPermissions(plan.Permissions)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Validation error. Ensure the Resource is in the correct format.",
+			err.Error(),
+		)
+		return
 	}
 
-	createTokenRequest := influxdb3.CreateDatabaseTokenJSONRequestBody{
+	createTokenRequest := influxdb3cloud.CreateDatabaseTokenJSONRequestBody{
 		Description: plan.Description.ValueString(),
 		Permissions: &permissionsRequest,
 	}
@@ -192,6 +186,7 @@ func (r *TokenResource) Create(ctx context.Context, req resource.CreateRequest, 
 	plan.Id = types.StringValue(createToken.Id.String())
 	plan.Permissions = getPermissions(createToken.Permissions)
 	plan.ExpiresAt = timetypes.NewRFC3339TimePointerValue(createToken.ExpiresAt)
+	plan.RevokedAt = timetypes.NewRFC3339TimePointerValue(createToken.RevokedAt)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -262,6 +257,7 @@ func (r *TokenResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	state.Id = types.StringValue(readToken.Id.String())
 	state.Permissions = getPermissions(readToken.Permissions)
 	state.ExpiresAt = timetypes.NewRFC3339TimePointerValue(readToken.ExpiresAt)
+	state.RevokedAt = timetypes.NewRFC3339TimePointerValue(readToken.RevokedAt)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -291,27 +287,16 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	// Generate API request body from plan
-	var permissionsRequest []influxdb3.DatabaseTokenPermission
-	for _, permission := range plan.Permissions {
-		resource := influxdb3.DatabaseTokenPermissionResource{}
-
-		err := resource.FromClusterDatabaseName(permission.Resource.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError(
-				"Validation error. Ensure the Resource is in the correct format.",
-				err.Error(),
-			)
-			return
-		}
-
-		permission := influxdb3.DatabaseTokenPermission{
-			Action:   permission.Action.ValueStringPointer(),
-			Resource: &resource,
-		}
-		permissionsRequest = append(permissionsRequest, permission)
+	permissionsRequest, err := buildPermissions(plan.Permissions)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Validation error. Ensure the Resource is in the correct format.",
+			err.Error(),
+		)
+		return
 	}
 
-	updateTokenRequest := influxdb3.UpdateDatabaseTokenJSONRequestBody{
+	updateTokenRequest := influxdb3cloud.UpdateDatabaseTokenJSONRequestBody{
 		Description: plan.Description.ValueStringPointer(),
 		Permissions: &permissionsRequest,
 	}
@@ -350,6 +335,7 @@ func (r *TokenResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	plan.Id = types.StringValue(updateToken.Id.String())
 	plan.Permissions = getPermissions(updateToken.Permissions)
 	plan.ExpiresAt = timetypes.NewRFC3339TimePointerValue(updateToken.ExpiresAt)
+	plan.RevokedAt = timetypes.NewRFC3339TimePointerValue(updateToken.RevokedAt)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)

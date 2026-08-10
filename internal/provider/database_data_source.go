@@ -6,7 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -22,9 +22,9 @@ func NewDatabaseDataSource() datasource.DataSource {
 
 // DatabasesDataSource is the data source implementation.
 type DatabaseDataSource struct {
-	accountID influxdb3.UuidV4
-	client    influxdb3.ClientWithResponses
-	clusterID influxdb3.UuidV4
+	accountID influxdb3cloud.UuidV4
+	client    influxdb3cloud.ClientWithResponses
+	clusterID influxdb3cloud.UuidV4
 }
 
 // Metadata returns the data source type name.

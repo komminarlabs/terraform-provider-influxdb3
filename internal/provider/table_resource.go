@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -30,9 +30,9 @@ func NewTableResource() resource.Resource {
 
 // TableResource defines the resource implementation.
 type TableResource struct {
-	accountID influxdb3.UuidV4
-	client    influxdb3.ClientWithResponses
-	clusterID influxdb3.UuidV4
+	accountID influxdb3cloud.UuidV4
+	client    influxdb3cloud.ClientWithResponses
+	clusterID influxdb3cloud.UuidV4
 }
 
 // TableModel maps InfluxDB database table schema data.
@@ -135,7 +135,7 @@ func (r *TableResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	// Generate API request body from plan
-	createTableRequest := influxdb3.CreateClusterDatabaseTableJSONRequestBody{
+	createTableRequest := influxdb3cloud.CreateClusterDatabaseTableJSONRequestBody{
 		Name: plan.Name.ValueString(),
 	}
 
@@ -221,7 +221,7 @@ func (r *TableResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	if !plan.Name.Equal(state.Name) {
-		renameTableRequest := influxdb3.RenameClusterDatabaseTableJSONRequestBody{
+		renameTableRequest := influxdb3cloud.RenameClusterDatabaseTableJSONRequestBody{
 			Name: plan.Name.ValueString(),
 		}
 

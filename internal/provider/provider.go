@@ -16,7 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // INFLUXDB3_HOST is the default InfluxDB V3 API host.
@@ -46,9 +46,9 @@ type InfluxDBProviderModel struct {
 }
 
 type providerData struct {
-	accountID influxdb3.UuidV4
-	client    influxdb3.ClientWithResponses
-	clusterID influxdb3.UuidV4
+	accountID influxdb3cloud.UuidV4
+	client    influxdb3cloud.ClientWithResponses
+	clusterID influxdb3cloud.UuidV4
 }
 
 // Metadata returns the provider type name.
@@ -252,10 +252,10 @@ func (p *InfluxDBProvider) Configure(ctx context.Context, req provider.Configure
 	// the Authorization header.
 	retryClient.HTTPClient.Transport = newLoggingHTTPTransport(token, retryClient.HTTPClient.Transport)
 
-	client, err := influxdb3.NewClientWithResponses(url, influxdb3.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
+	client, err := influxdb3cloud.NewClientWithResponses(url, influxdb3cloud.WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
 		req.Header.Set("Accept", "application/json")
 		return nil
-	}), influxdb3.WithHTTPClient(retryClient.StandardClient()))
+	}), influxdb3cloud.WithHTTPClient(retryClient.StandardClient()))
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create InfluxDB V3 Client",
