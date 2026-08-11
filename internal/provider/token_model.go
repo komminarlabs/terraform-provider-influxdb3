@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-timetypes/timetypes"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // TokenModel maps InfluxDB database token schema data.
@@ -21,6 +21,7 @@ type TokenModel struct {
 	ExpiresAt   timetypes.RFC3339      `tfsdk:"expires_at"`
 	Id          types.String           `tfsdk:"id"`
 	Permissions []TokenPermissionModel `tfsdk:"permissions"`
+	RevokedAt   timetypes.RFC3339      `tfsdk:"revoked_at"`
 }
 
 // TokenPermissionModel maps InfluxDB database token permission schema data.
@@ -56,7 +57,30 @@ func (v rfc3339NoSubsecondsValidator) ValidateString(ctx context.Context, req va
 	}
 }
 
-func getPermissions(permissions []influxdb3.DatabaseTokenPermission) []TokenPermissionModel {
+func buildPermissions(permissions []TokenPermissionModel) ([]influxdb3cloud.DatabaseTokenPermission, error) {
+	var permissionsRequest []influxdb3cloud.DatabaseTokenPermission
+	for _, permission := range permissions {
+		resource := influxdb3cloud.DatabaseTokenPermissionResource{}
+
+		var err error
+		if permission.Resource.ValueString() == string(influxdb3cloud.Asterisk) {
+			err = resource.FromDatabaseTokenResourceAllDatabases(influxdb3cloud.Asterisk)
+		} else {
+			err = resource.FromClusterDatabaseName(permission.Resource.ValueString())
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		permissionsRequest = append(permissionsRequest, influxdb3cloud.DatabaseTokenPermission{
+			Action:   permission.Action.ValueStringPointer(),
+			Resource: &resource,
+		})
+	}
+	return permissionsRequest, nil
+}
+
+func getPermissions(permissions []influxdb3cloud.DatabaseTokenPermission) []TokenPermissionModel {
 	permissionsState := []TokenPermissionModel{}
 	for _, permission := range permissions {
 		resource, _ := permission.Resource.AsClusterDatabaseName()

@@ -32,6 +32,7 @@ Read-Only:
 - `expires_at` (String) The date and time that the database token expires, if applicable. Uses RFC3339 format.
 - `id` (String) The ID of the database token.
 - `permissions` (Attributes Set) The set of permissions the database token allows. (see [below for nested schema](#nestedatt--tokens--permissions))
+- `revoked_at` (String) The date and time that the database token was revoked, if applicable. Uses RFC3339 format.
 
 <a id="nestedatt--tokens--permissions"></a>
 ### Nested Schema for `tokens.permissions`

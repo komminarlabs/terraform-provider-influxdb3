@@ -28,6 +28,7 @@ Gets a database token. Use this data source to retrieve information about a data
 - `description` (String) The description of the database token.
 - `expires_at` (String) The date and time that the database token expires, if applicable. Uses RFC3339 format.
 - `permissions` (Attributes Set) The list of permissions the database token allows. (see [below for nested schema](#nestedatt--permissions))
+- `revoked_at` (String) The date and time that the database token was revoked, if applicable. Uses RFC3339 format.
 
 <a id="nestedatt--permissions"></a>
 ### Nested Schema for `permissions`

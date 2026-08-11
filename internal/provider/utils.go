@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/thulasirajkomminar/influxdb3-management-go"
+	"github.com/thulasirajkomminar/influxdb3-management-go/cloud"
 )
 
 // formatErrorResponse formats the error response from the InfluxDB API.
@@ -19,7 +19,7 @@ func formatErrorResponse(rsp any, statusCode int) string {
 	}
 
 	if field := v.FieldByName("JSON" + strconv.Itoa(statusCode)); field.IsValid() {
-		if errorDetail, ok := field.Interface().(*influxdb3.Error); ok && errorDetail != nil {
+		if errorDetail, ok := field.Interface().(*influxdb3cloud.Error); ok && errorDetail != nil {
 			return fmt.Sprintf("HTTP Status Code: %d\nError Code: %d\nError Message: %s\n", statusCode, errorDetail.Code, errorDetail.Message)
 		}
 	}
