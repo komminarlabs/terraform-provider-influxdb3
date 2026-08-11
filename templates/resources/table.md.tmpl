@@ -7,6 +7,8 @@ description: |-
 
 # {{.Name}} ({{.Type}})
 
+~> **Deprecated** This name is deprecated and will be removed in the next major version of the provider. Use the [`influxdb3_cloud_table`](./cloud_table) resource instead; a `moved` block (Terraform 1.8+) migrates existing state without replacement. See the [InfluxDB 3 deployment types and resource renaming guide](../guides/deployment-types-and-resource-renaming) for details.
+
 {{ .Description | trimspace }}
 
 ## Example Usage

@@ -28,11 +28,15 @@ func newLoggingHTTPTransport(token string, base http.RoundTripper) http.RoundTri
 	if base == nil {
 		base = http.DefaultTransport
 	}
+	// An empty token (core/enterprise servers running without authentication)
+	// must not be turned into a mask regex, as the empty pattern matches
+	// everywhere.
+	maskRegexes := []*regexp.Regexp{accessTokenRegex}
+	if token != "" {
+		maskRegexes = append(maskRegexes, regexp.MustCompile(regexp.QuoteMeta(token)))
+	}
 	return &maskingRoundTripper{
-		maskRegexes: []*regexp.Regexp{
-			accessTokenRegex,
-			regexp.MustCompile(regexp.QuoteMeta(token)),
-		},
+		maskRegexes: maskRegexes,
 		next: logging.NewLoggingHTTPTransport(&bearerTokenRoundTripper{
 			token: token,
 			next:  base,
@@ -60,6 +64,10 @@ type bearerTokenRoundTripper struct {
 }
 
 func (b *bearerTokenRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if b.token == "" {
+		// core/enterprise servers can run without authentication.
+		return b.next.RoundTrip(req)
+	}
 	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", "Bearer "+b.token)
 	return b.next.RoundTrip(req)

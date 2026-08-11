@@ -45,36 +45,52 @@ terraform {
 }
 ```
 
-Initialize the provider
+Initialize the provider for the InfluxDB 3 deployment type you manage.
+
+For [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/) (the default, `type = "cloud"`):
 
 ```terraform
 provider "influxdb3" {
   account_id = "*******"
   cluster_id = "*******"
-  token      = "*******"
+  token      = "*******" # management token
 }
 ```
 
-All provider configuration values can also be set with environment variables: `INFLUXDB3_ACCOUNT_ID`, `INFLUXDB3_CLUSTER_ID`, `INFLUXDB3_TOKEN` and `INFLUXDB3_HOST` (to override the management API host, which defaults to `https://console.influxdata.com`).
+For self-hosted InfluxDB 3 Core or Enterprise:
 
-## Supported InfluxDB flavours
+```terraform
+provider "influxdb3" {
+  type  = "core" # or "enterprise"
+  host  = "http://localhost:8181"
+  token = "apiv3_*******" # admin token; optional when the server runs without authentication
+}
+```
 
-- [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
+All provider configuration values can also be set with environment variables: `INFLUXDB3_TYPE`, `INFLUXDB3_ACCOUNT_ID`, `INFLUXDB3_CLUSTER_ID`, `INFLUXDB3_TOKEN` and `INFLUXDB3_HOST` (for `type = "cloud"` the host defaults to `https://console.influxdata.com`).
+
+## Supported InfluxDB 3 deployment types
+
+- `cloud` — [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
+- `core` — InfluxDB 3 Core (self-hosted); resources coming in upcoming releases
+- `enterprise` — InfluxDB 3 Enterprise (self-hosted); resources coming in upcoming releases
 
 ## Available functionalities
 
+Resource names carry the deployment type as a prefix. The unprefixed `influxdb3_*` names still work but are deprecated and will be removed in the next major version — see the [deployment types and resource renaming guide](docs/guides/deployment-types-and-resource-renaming.md) for migration steps using `moved` blocks.
+
 ### Data Sources
 
-- `influxdb3_database`
-- `influxdb3_databases`
-- `influxdb3_token`
-- `influxdb3_tokens`
+- `influxdb3_cloud_database` (deprecated alias: `influxdb3_database`)
+- `influxdb3_cloud_databases` (deprecated alias: `influxdb3_databases`)
+- `influxdb3_cloud_token` (deprecated alias: `influxdb3_token`)
+- `influxdb3_cloud_tokens` (deprecated alias: `influxdb3_tokens`)
 
 ### Resources
 
-- `influxdb3_database`
-- `influxdb3_table`
-- `influxdb3_token`
+- `influxdb3_cloud_database` (deprecated alias: `influxdb3_database`)
+- `influxdb3_cloud_table` (deprecated alias: `influxdb3_table`)
+- `influxdb3_cloud_token` (deprecated alias: `influxdb3_token`)
 
 ## Developing the Provider
 

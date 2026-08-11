@@ -7,6 +7,8 @@ description: |-
 
 # influxdb3_table (Resource)
 
+~> **Deprecated** This name is deprecated and will be removed in the next major version of the provider. Use the [`influxdb3_cloud_table`](./cloud_table) resource instead; a `moved` block (Terraform 1.8+) migrates existing state without replacement. See the [InfluxDB 3 deployment types and resource renaming guide](../guides/deployment-types-and-resource-renaming) for details.
+
 Creates and manages a table in a cluster database. **Note:** The InfluxDB V3 Management API does not provide an endpoint to read tables, so this resource cannot detect drift and does not support import.
 
 ## Example Usage

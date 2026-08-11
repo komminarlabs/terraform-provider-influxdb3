@@ -10,11 +10,19 @@ description: |-
 
 Use the InfluxDB V3 provider to deploy and manage resources supported by InfluxDB V3. You must configure the provider with the proper credentials before you can use it.
 
-## Supported InfluxDB flavours
+## Supported InfluxDB 3 deployment types
 
-* [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
+The provider is configured for one InfluxDB 3 deployment type via the `type` attribute:
+
+* `cloud` (default) — [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
+* `core` — InfluxDB 3 Core (self-hosted)
+* `enterprise` — InfluxDB 3 Enterprise (self-hosted)
+
+Resource names carry the deployment type as a prefix (for example `influxdb3_cloud_database`). The unprefixed names are deprecated aliases; see the [deployment types and resource renaming guide](guides/deployment-types-and-resource-renaming) for details and migration steps. Resources for the `core` and `enterprise` types are being added in upcoming releases.
 
 ## Example Usage
+
+### InfluxDB Cloud Dedicated
 
 ```terraform
 terraform {
@@ -25,12 +33,41 @@ terraform {
   }
 }
 
-provider "influxdb3" {}
+provider "influxdb3" {
+  type       = "cloud" # optional, this is the default
+  account_id = "11111111-2222-3333-4444-555555555555"
+  cluster_id = "66666666-7777-8888-9999-000000000000"
+  token      = var.influxdb_management_token
+}
+```
+
+The token is a [management token](https://docs.influxdata.com/influxdb3/cloud-dedicated/admin/tokens/management/) for your Cloud Dedicated cluster.
+
+### InfluxDB 3 Core
+
+```terraform
+provider "influxdb3" {
+  type  = "core"
+  host  = "http://localhost:8181"
+  token = var.influxdb_admin_token # optional when the server runs without authentication
+}
+```
+
+The token is an admin token (`apiv3_...`), created with `influxdb3 create token --admin`. `account_id` and `cluster_id` are Cloud Dedicated concepts and must not be set.
+
+### InfluxDB 3 Enterprise
+
+```terraform
+provider "influxdb3" {
+  type  = "enterprise"
+  host  = "https://influxdb.example.com:8181"
+  token = var.influxdb_admin_token
+}
 ```
 
 ## Environment Variables
 
-Credentials can be provided by using the `INFLUXDB3_ACCOUNT_ID`, `INFLUXDB3_CLUSTER_ID` and `INFLUXDB3_TOKEN` environment variables. The management API host can be overridden with `INFLUXDB3_HOST`.
+Credentials can be provided by using the `INFLUXDB3_ACCOUNT_ID`, `INFLUXDB3_CLUSTER_ID` and `INFLUXDB3_TOKEN` environment variables. The deployment type can be set with `INFLUXDB3_TYPE` and the API host with `INFLUXDB3_HOST`.
 
 ### Example
 
@@ -53,7 +90,8 @@ With [Terraform debug logging](https://developer.hashicorp.com/terraform/interna
 
 ### Optional
 
-- `account_id` (String) The ID of the account that the cluster belongs to. Can also be set with the `INFLUXDB3_ACCOUNT_ID` environment variable.
-- `cluster_id` (String) The ID of the cluster that you want to manage. Can also be set with the `INFLUXDB3_CLUSTER_ID` environment variable.
-- `host` (String) The InfluxDB V3 management API host URL. The default is `https://console.influxdata.com`. Can also be set with the `INFLUXDB3_HOST` environment variable.
-- `token` (String, Sensitive) The InfluxDB management token. Can also be set with the `INFLUXDB3_TOKEN` environment variable.
+- `account_id` (String) The ID of the account that the cluster belongs to. Required for the `cloud` deployment type and not supported for `core` and `enterprise`. Can also be set with the `INFLUXDB3_ACCOUNT_ID` environment variable.
+- `cluster_id` (String) The ID of the cluster that you want to manage. Required for the `cloud` deployment type and not supported for `core` and `enterprise`. Can also be set with the `INFLUXDB3_CLUSTER_ID` environment variable.
+- `host` (String) The InfluxDB V3 API host URL. For the `cloud` deployment type the default is `https://console.influxdata.com`. Required for the `core` and `enterprise` deployment types (for example `http://localhost:8181`). Can also be set with the `INFLUXDB3_HOST` environment variable.
+- `token` (String, Sensitive) The InfluxDB token. For the `cloud` deployment type this is a management token and is required. For the `core` and `enterprise` deployment types this is an admin token (`apiv3_...`) and may be omitted when the server runs without authentication. Can also be set with the `INFLUXDB3_TOKEN` environment variable.
+- `type` (String) The InfluxDB 3 deployment type to manage. Valid values are `cloud` (InfluxDB Cloud Dedicated), `core` (InfluxDB 3 Core) or `enterprise` (InfluxDB 3 Enterprise). The default is `cloud`. Can also be set with the `INFLUXDB3_TYPE` environment variable.

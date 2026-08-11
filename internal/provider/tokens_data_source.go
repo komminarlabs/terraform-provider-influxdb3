@@ -17,13 +17,20 @@ var (
 	_ datasource.DataSourceWithConfigure = &TokensDataSource{}
 )
 
-// NewTokensDataSource is a helper function to simplify the provider implementation.
+// NewTokensDataSource returns the deprecated influxdb3_tokens alias of the
+// influxdb3_cloud_tokens data source.
 func NewTokensDataSource() datasource.DataSource {
-	return &TokensDataSource{}
+	return &TokensDataSource{aliasedType: aliasedType{typeSuffix: "_tokens", deprecated: true}}
+}
+
+// NewCloudTokensDataSource is a helper function to simplify the provider implementation.
+func NewCloudTokensDataSource() datasource.DataSource {
+	return &TokensDataSource{aliasedType: aliasedType{typeSuffix: "_cloud_tokens"}}
 }
 
 // TokensDataSource is the data source implementation.
 type TokensDataSource struct {
+	aliasedType
 	accountID influxdb3cloud.UuidV4
 	client    influxdb3cloud.ClientWithResponses
 	clusterID influxdb3cloud.UuidV4
@@ -36,11 +43,12 @@ type TokensDataSourceModel struct {
 
 // Metadata returns the data source type name.
 func (d *TokensDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_tokens"
+	resp.TypeName = req.ProviderTypeName + d.typeSuffix
 }
 
 // Schema defines the schema for the data source.
 func (d *TokensDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	defer d.applyDataSourceDeprecation(resp)
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		Description: "Gets all database tokens for a cluster.",
@@ -112,6 +120,10 @@ func (d *TokensDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 func (d *TokensDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	pd, ok := newProviderData(req.ProviderData, &resp.Diagnostics)
 	if !ok {
+		return
+	}
+
+	if !pd.requireDeploymentType(d.typeName(), &resp.Diagnostics, typeCloud) {
 		return
 	}
 

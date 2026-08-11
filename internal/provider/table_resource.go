@@ -21,15 +21,23 @@ import (
 var (
 	_ resource.Resource              = &TableResource{}
 	_ resource.ResourceWithConfigure = &TableResource{}
+	_ resource.ResourceWithMoveState = &TableResource{}
 )
 
-// NewTableResource is a helper function to simplify the provider implementation.
+// NewTableResource returns the deprecated influxdb3_table alias of the
+// influxdb3_cloud_table resource.
 func NewTableResource() resource.Resource {
-	return &TableResource{}
+	return &TableResource{aliasedType: aliasedType{typeSuffix: "_table", deprecated: true}}
+}
+
+// NewCloudTableResource is a helper function to simplify the provider implementation.
+func NewCloudTableResource() resource.Resource {
+	return &TableResource{aliasedType: aliasedType{typeSuffix: "_cloud_table"}}
 }
 
 // TableResource defines the resource implementation.
 type TableResource struct {
+	aliasedType
 	accountID influxdb3cloud.UuidV4
 	client    influxdb3cloud.ClientWithResponses
 	clusterID influxdb3cloud.UuidV4
@@ -46,11 +54,12 @@ type TableModel struct {
 
 // Metadata returns the resource type name.
 func (r *TableResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_table"
+	resp.TypeName = req.ProviderTypeName + r.typeSuffix
 }
 
 // Schema defines the schema for the resource.
 func (r *TableResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	defer r.applyResourceDeprecation(resp)
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Creates and manages a table in a cluster database. **Note:** The InfluxDB V3 Management API does not provide an endpoint to read tables, so this resource cannot detect drift and does not support import.",
@@ -296,7 +305,19 @@ func (r *TableResource) Configure(ctx context.Context, req resource.ConfigureReq
 		return
 	}
 
+	if !pd.requireDeploymentType(r.typeName(), &resp.Diagnostics, typeCloud) {
+		return
+	}
+
 	r.accountID = pd.accountID
 	r.client = pd.client
 	r.clusterID = pd.clusterID
+}
+
+// MoveState enables a moved block from the deprecated influxdb3_table
+// resource to influxdb3_cloud_table.
+func (r *TableResource) MoveState(ctx context.Context) []resource.StateMover {
+	schemaResp := resource.SchemaResponse{}
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	return aliasStateMover(r.legacyTypeName(), schemaResp.Schema)
 }

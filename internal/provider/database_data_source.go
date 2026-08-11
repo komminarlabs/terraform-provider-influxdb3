@@ -15,13 +15,20 @@ var (
 	_ datasource.DataSourceWithConfigure = &DatabaseDataSource{}
 )
 
-// NewDatabaseDataSource is a helper function to simplify the provider implementation.
+// NewDatabaseDataSource returns the deprecated influxdb3_database alias of
+// the influxdb3_cloud_database data source.
 func NewDatabaseDataSource() datasource.DataSource {
-	return &DatabaseDataSource{}
+	return &DatabaseDataSource{aliasedType: aliasedType{typeSuffix: "_database", deprecated: true}}
+}
+
+// NewCloudDatabaseDataSource is a helper function to simplify the provider implementation.
+func NewCloudDatabaseDataSource() datasource.DataSource {
+	return &DatabaseDataSource{aliasedType: aliasedType{typeSuffix: "_cloud_database"}}
 }
 
 // DatabasesDataSource is the data source implementation.
 type DatabaseDataSource struct {
+	aliasedType
 	accountID influxdb3cloud.UuidV4
 	client    influxdb3cloud.ClientWithResponses
 	clusterID influxdb3cloud.UuidV4
@@ -29,11 +36,12 @@ type DatabaseDataSource struct {
 
 // Metadata returns the data source type name.
 func (d *DatabaseDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_database"
+	resp.TypeName = req.ProviderTypeName + d.typeSuffix
 }
 
 // Schema defines the schema for the data source.
 func (d *DatabaseDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	defer d.applyDataSourceDeprecation(resp)
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		Description: "Retrieves a database. Use this data source to retrieve information for a specific database.",
@@ -87,6 +95,10 @@ func (d *DatabaseDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 func (d *DatabaseDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	pd, ok := newProviderData(req.ProviderData, &resp.Diagnostics)
 	if !ok {
+		return
+	}
+
+	if !pd.requireDeploymentType(d.typeName(), &resp.Diagnostics, typeCloud) {
 		return
 	}
 

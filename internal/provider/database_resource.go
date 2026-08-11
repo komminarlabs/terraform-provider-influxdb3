@@ -24,15 +24,23 @@ var (
 	_ resource.Resource                = &DatabaseResource{}
 	_ resource.ResourceWithConfigure   = &DatabaseResource{}
 	_ resource.ResourceWithImportState = &DatabaseResource{}
+	_ resource.ResourceWithMoveState   = &DatabaseResource{}
 )
 
-// NewDatabaseResource is a helper function to simplify the provider implementation.
+// NewDatabaseResource returns the deprecated influxdb3_database alias of the
+// influxdb3_cloud_database resource.
 func NewDatabaseResource() resource.Resource {
-	return &DatabaseResource{}
+	return &DatabaseResource{aliasedType: aliasedType{typeSuffix: "_database", deprecated: true}}
+}
+
+// NewCloudDatabaseResource is a helper function to simplify the provider implementation.
+func NewCloudDatabaseResource() resource.Resource {
+	return &DatabaseResource{aliasedType: aliasedType{typeSuffix: "_cloud_database"}}
 }
 
 // DatabaseResource defines the resource implementation.
 type DatabaseResource struct {
+	aliasedType
 	accountID influxdb3cloud.UuidV4
 	client    influxdb3cloud.ClientWithResponses
 	clusterID influxdb3cloud.UuidV4
@@ -40,11 +48,12 @@ type DatabaseResource struct {
 
 // Metadata returns the resource type name.
 func (r *DatabaseResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_database"
+	resp.TypeName = req.ProviderTypeName + r.typeSuffix
 }
 
 // Schema defines the schema for the resource.
 func (r *DatabaseResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	defer r.applyResourceDeprecation(resp)
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Creates and manages a database.",
@@ -416,6 +425,10 @@ func (r *DatabaseResource) Configure(ctx context.Context, req resource.Configure
 		return
 	}
 
+	if !pd.requireDeploymentType(r.typeName(), &resp.Diagnostics, typeCloud) {
+		return
+	}
+
 	r.accountID = pd.accountID
 	r.client = pd.client
 	r.clusterID = pd.clusterID
@@ -423,4 +436,12 @@ func (r *DatabaseResource) Configure(ctx context.Context, req resource.Configure
 
 func (r *DatabaseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
+}
+
+// MoveState enables a moved block from the deprecated influxdb3_database
+// resource to influxdb3_cloud_database.
+func (r *DatabaseResource) MoveState(ctx context.Context) []resource.StateMover {
+	schemaResp := resource.SchemaResponse{}
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	return aliasStateMover(r.legacyTypeName(), schemaResp.Schema)
 }

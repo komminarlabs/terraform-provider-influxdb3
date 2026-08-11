@@ -22,15 +22,23 @@ var (
 	_ resource.Resource                = &TokenResource{}
 	_ resource.ResourceWithConfigure   = &TokenResource{}
 	_ resource.ResourceWithImportState = &TokenResource{}
+	_ resource.ResourceWithMoveState   = &TokenResource{}
 )
 
-// NewTokenResource is a helper function to simplify the provider implementation.
+// NewTokenResource returns the deprecated influxdb3_token alias of the
+// influxdb3_cloud_token resource.
 func NewTokenResource() resource.Resource {
-	return &TokenResource{}
+	return &TokenResource{aliasedType: aliasedType{typeSuffix: "_token", deprecated: true}}
+}
+
+// NewCloudTokenResource is a helper function to simplify the provider implementation.
+func NewCloudTokenResource() resource.Resource {
+	return &TokenResource{aliasedType: aliasedType{typeSuffix: "_cloud_token"}}
 }
 
 // TokenResource defines the resource implementation.
 type TokenResource struct {
+	aliasedType
 	accountID influxdb3cloud.UuidV4
 	client    influxdb3cloud.ClientWithResponses
 	clusterID influxdb3cloud.UuidV4
@@ -38,11 +46,12 @@ type TokenResource struct {
 
 // Metadata returns the resource type name.
 func (r *TokenResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_token"
+	resp.TypeName = req.ProviderTypeName + r.typeSuffix
 }
 
 // Schema defines the schema for the resource.
 func (r *TokenResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+	defer r.applyResourceDeprecation(resp)
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		Description: "Creates and manages a token and returns the generated database token. Use this resource to create/manage a token, which generates an database token with permissions to read or write to a specific database.",
@@ -390,6 +399,10 @@ func (r *TokenResource) Configure(ctx context.Context, req resource.ConfigureReq
 		return
 	}
 
+	if !pd.requireDeploymentType(r.typeName(), &resp.Diagnostics, typeCloud) {
+		return
+	}
+
 	r.accountID = pd.accountID
 	r.client = pd.client
 	r.clusterID = pd.clusterID
@@ -397,4 +410,12 @@ func (r *TokenResource) Configure(ctx context.Context, req resource.ConfigureReq
 
 func (r *TokenResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// MoveState enables a moved block from the deprecated influxdb3_token
+// resource to influxdb3_cloud_token.
+func (r *TokenResource) MoveState(ctx context.Context) []resource.StateMover {
+	schemaResp := resource.SchemaResponse{}
+	r.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	return aliasStateMover(r.legacyTypeName(), schemaResp.Schema)
 }

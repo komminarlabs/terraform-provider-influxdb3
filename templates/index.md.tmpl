@@ -10,17 +10,49 @@ description: |-
 
 Use the InfluxDB V3 provider to deploy and manage resources supported by InfluxDB V3. You must configure the provider with the proper credentials before you can use it.
 
-## Supported InfluxDB flavours
+## Supported InfluxDB 3 deployment types
 
-* [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
+The provider is configured for one InfluxDB 3 deployment type via the `type` attribute:
+
+* `cloud` (default) — [InfluxDB Cloud Dedicated](https://www.influxdata.com/products/influxdb-cloud/dedicated/)
+* `core` — InfluxDB 3 Core (self-hosted)
+* `enterprise` — InfluxDB 3 Enterprise (self-hosted)
+
+Resource names carry the deployment type as a prefix (for example `influxdb3_cloud_database`). The unprefixed names are deprecated aliases; see the [deployment types and resource renaming guide](guides/deployment-types-and-resource-renaming) for details and migration steps. Resources for the `core` and `enterprise` types are being added in upcoming releases.
 
 ## Example Usage
 
+### InfluxDB Cloud Dedicated
+
 {{tffile "examples/provider/provider.tf"}}
+
+The token is a [management token](https://docs.influxdata.com/influxdb3/cloud-dedicated/admin/tokens/management/) for your Cloud Dedicated cluster.
+
+### InfluxDB 3 Core
+
+```terraform
+provider "influxdb3" {
+  type  = "core"
+  host  = "http://localhost:8181"
+  token = var.influxdb_admin_token # optional when the server runs without authentication
+}
+```
+
+The token is an admin token (`apiv3_...`), created with `influxdb3 create token --admin`. `account_id` and `cluster_id` are Cloud Dedicated concepts and must not be set.
+
+### InfluxDB 3 Enterprise
+
+```terraform
+provider "influxdb3" {
+  type  = "enterprise"
+  host  = "https://influxdb.example.com:8181"
+  token = var.influxdb_admin_token
+}
+```
 
 ## Environment Variables
 
-Credentials can be provided by using the `INFLUXDB3_ACCOUNT_ID`, `INFLUXDB3_CLUSTER_ID` and `INFLUXDB3_TOKEN` environment variables. The management API host can be overridden with `INFLUXDB3_HOST`.
+Credentials can be provided by using the `INFLUXDB3_ACCOUNT_ID`, `INFLUXDB3_CLUSTER_ID` and `INFLUXDB3_TOKEN` environment variables. The deployment type can be set with `INFLUXDB3_TYPE` and the API host with `INFLUXDB3_HOST`.
 
 ### Example
 

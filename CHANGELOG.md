@@ -5,6 +5,20 @@ All notable changes to this project will automatically be documented in this fil
 The format is based on vKeep a Changelog(https://keepachangelog.com/en/1.0.0/),
 and this project adheres to vSemantic Versioning(https://semver.org/spec/v2.0.0.html).
 
+## v1.7.0 - 2026-08-11
+
+### What's Changed
+
+* Added a new `type` provider attribute (env: `INFLUXDB3_TYPE`) to select the InfluxDB 3 deployment type: `cloud` (InfluxDB Cloud Dedicated, the default), `core` or `enterprise` (self-hosted). The provider builds the matching management API client; resources for the `core` and `enterprise` types will follow in upcoming releases.
+* Renamed all resources and data sources to carry a deployment-type prefix: `influxdb3_cloud_database`, `influxdb3_cloud_table`, `influxdb3_cloud_token`, `influxdb3_cloud_databases`, `influxdb3_cloud_tokens`. The unprefixed `influxdb3_*` names keep working as deprecated aliases and will be removed in the next major version. Resources support `moved` blocks (Terraform 1.8+) to migrate state to the new names without replacement.
+* Added a new `revoked_at` attribute in token resource and data sources to get the revocation time of a token.
+* Upgraded the management SDK to v1.0.0 (per-variant packages).
+* Added a registry guide: "InfluxDB 3 deployment types and resource renaming".
+
+### Deprecated
+
+* The `influxdb3_database`, `influxdb3_table`, `influxdb3_token`, `influxdb3_databases` and `influxdb3_tokens` names. Use the `influxdb3_cloud_*` equivalents instead.
+
 ## v1.6.0 - 2026-03-09
 
 ### What's Changed
